@@ -491,7 +491,7 @@ macro_rules! hal {
                     }
                     fn set_dtg_value(value: u8) {
                         let tim = unsafe { &*<$TIM>::ptr() };
-                        tim.bdtr.modify(|_,w| unsafe { w.dtg().bits(value) });
+                        tim.bdtr.modify(|_,w| w.dtg().bits(value));
                     }
                     fn read_dtg_value() -> u8 {
                         let tim = unsafe { &*<$TIM>::ptr() };
