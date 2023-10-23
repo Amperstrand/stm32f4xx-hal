@@ -730,19 +730,35 @@ impl<CS> Rtc<CS> {
         match event {
             Event::AlarmA => {
                 self.regs.isr.modify(|_, w| w.alraf().clear_bit());
-                unsafe { (*pac::EXTI::ptr()).pr.write(|w| w.pr17().clear_bit_by_one()) };
+                unsafe {
+                    (*pac::EXTI::ptr())
+                        .pr
+                        .write(|w| w.pr17().clear_bit_by_one())
+                };
             }
             Event::AlarmB => {
                 self.regs.isr.modify(|_, w| w.alrbf().clear_bit());
-                unsafe { (*pac::EXTI::ptr()).pr.write(|w| w.pr17().clear_bit_by_one()) };
+                unsafe {
+                    (*pac::EXTI::ptr())
+                        .pr
+                        .write(|w| w.pr17().clear_bit_by_one())
+                };
             }
             Event::Wakeup => {
                 self.regs.isr.modify(|_, w| w.wutf().clear_bit());
-                unsafe { (*pac::EXTI::ptr()).pr.write(|w| w.pr22().clear_bit_by_one()) };
+                unsafe {
+                    (*pac::EXTI::ptr())
+                        .pr
+                        .write(|w| w.pr22().clear_bit_by_one())
+                };
             }
             Event::Timestamp => {
                 self.regs.isr.modify(|_, w| w.tsf().clear_bit());
-                unsafe { (*pac::EXTI::ptr()).pr.write(|w| w.pr21().clear_bit_by_one()) };
+                unsafe {
+                    (*pac::EXTI::ptr())
+                        .pr
+                        .write(|w| w.pr21().clear_bit_by_one())
+                };
             }
         }
     }
