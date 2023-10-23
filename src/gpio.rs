@@ -449,34 +449,26 @@ impl<const P: char, const N: u8, MODE> Pin<P, N, MODE> {
     #[inline(always)]
     fn _set_high(&mut self) {
         // NOTE(unsafe) atomic write to a stateless register
-        unsafe { &(*Gpio::<P>::ptr()) }
-            .bsrr
-            .write(|w| w.bs(N).set_bit())
+        let gpio = unsafe { &(*Gpio::<P>::ptr()) };
+        gpio.bsrr.write(|w| w.bs(N).set_bit())
     }
     #[inline(always)]
     fn _set_low(&mut self) {
         // NOTE(unsafe) atomic write to a stateless register
-        unsafe { &(*Gpio::<P>::ptr()) }
-            .bsrr
-            .write(|w| w.br(N).set_bit())
+        let gpio = unsafe { &(*Gpio::<P>::ptr()) };
+        gpio.bsrr.write(|w| w.br(N).set_bit())
     }
     #[inline(always)]
     fn _is_set_low(&self) -> bool {
         // NOTE(unsafe) atomic read with no side effects
-        unsafe { &(*Gpio::<P>::ptr()) }
-            .odr
-            .read()
-            .odr(N)
-            .bit_is_clear()
+        let gpio = unsafe { &(*Gpio::<P>::ptr()) };
+        gpio.odr.read().odr(N).bit_is_clear()
     }
     #[inline(always)]
     fn _is_low(&self) -> bool {
         // NOTE(unsafe) atomic read with no side effects
-        unsafe { &(*Gpio::<P>::ptr()) }
-            .idr
-            .read()
-            .idr(N)
-            .bit_is_clear()
+        let gpio = unsafe { &(*Gpio::<P>::ptr()) };
+        gpio.idr.read().idr(N).bit_is_clear()
     }
 }
 
