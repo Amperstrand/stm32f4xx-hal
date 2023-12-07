@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - add `embedded-hal-nb::serial`
 
 ## [v0.19.0] - 2023-12-11
+ - Move private features to `build.rs`
 
 ### Added
 
