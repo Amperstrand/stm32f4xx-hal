@@ -1,4 +1,4 @@
-use std::env;
+use std::{collections::HashSet, env};
 
 #[derive(Clone, Copy, Debug)]
 enum GetOneError {
@@ -175,16 +175,20 @@ const FEATURES: phf::Map<&str, &[&str]> = phf::phf_map! {
     "pac_dfsdm2" => &["any_dfsdm"],
 };
 
-fn enable_feature(fname: &str) {
-    if let Some(v) = FEATURES.get(fname) {
-        for &f in v.iter() {
-            println!("cargo:rustc-cfg={}", f);
-            enable_feature(f);
+fn enable_feature<'a>(fname: &'a str, enabled: &mut HashSet<&'a str>) {
+    if !enabled.contains(fname) {
+        if let Some(v) = FEATURES.get(fname) {
+            for &f in v.iter() {
+                println!("cargo:rustc-cfg={}", f);
+                enabled.insert(fname);
+                enable_feature(f, enabled);
+            }
         }
     }
 }
 
 fn main() {
+    let mut enabled = HashSet::new();
     let chip_name = match env::vars()
         .map(|(a, _)| a)
         .filter(|x| x.starts_with("CARGO_FEATURE_STM32F4"))
@@ -198,5 +202,5 @@ fn main() {
     .unwrap()
     .to_ascii_lowercase();
 
-    enable_feature(&chip_name);
+    enable_feature(&chip_name, &mut enabled);
 }
