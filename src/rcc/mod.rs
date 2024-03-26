@@ -191,9 +191,8 @@ macro_rules! bus_struct {
         $(
             $(#[$attr])*
             #[doc = $doc]
-            pub struct $busX {
-                _0: (),
-            }
+            #[non_exhaustive]
+            pub struct $busX;
 
             $(#[$attr])*
             impl $busX {
@@ -225,9 +224,8 @@ bus_struct! {
 
 /// AMBA High-performance Bus 3 (AHB3) registers
 #[cfg(any(feature = "fsmc", feature = "fmc"))]
-pub struct AHB3 {
-    _0: (),
-}
+#[non_exhaustive]
+pub struct AHB3;
 
 #[cfg(any(feature = "fsmc", feature = "fmc"))]
 impl AHB3 {

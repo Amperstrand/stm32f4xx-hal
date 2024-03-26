@@ -83,25 +83,29 @@ use crate::pac::FSMC;
 /// A sub-bank of bank 1, with its own chip select output
 pub trait SubBank: sealed::SealedSubBank {}
 /// Sub-bank 1
-pub struct SubBank1(());
+#[non_exhaustive]
+pub struct SubBank1;
 impl sealed::SealedSubBank for SubBank1 {
     const BASE_ADDRESS: usize = 0x6000_0000;
 }
 impl SubBank for SubBank1 {}
 /// Sub-bank 2
-pub struct SubBank2(());
+#[non_exhaustive]
+pub struct SubBank2;
 impl sealed::SealedSubBank for SubBank2 {
     const BASE_ADDRESS: usize = 0x6400_0000;
 }
 impl SubBank for SubBank2 {}
 /// Sub-bank 3
-pub struct SubBank3(());
+#[non_exhaustive]
+pub struct SubBank3;
 impl sealed::SealedSubBank for SubBank3 {
     const BASE_ADDRESS: usize = 0x6800_0000;
 }
 impl SubBank for SubBank3 {}
 /// Sub-bank 4
-pub struct SubBank4(());
+#[non_exhaustive]
+pub struct SubBank4;
 impl sealed::SealedSubBank for SubBank4 {
     const BASE_ADDRESS: usize = 0x6c00_0000;
 }

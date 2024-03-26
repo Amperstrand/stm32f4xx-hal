@@ -377,9 +377,11 @@ dma_map!(
 address!((pac::SPDIFRX, dr, u32),);
 
 #[cfg(feature = "aes")]
-pub struct AES_IN(());
+#[non_exhaustive]
+pub struct AES_IN;
 #[cfg(feature = "aes")]
-pub struct AES_OUT(());
+#[non_exhaustive]
+pub struct AES_OUT;
 
 #[cfg(feature = "aes")]
 unsafe impl PeriAddress for AES_IN {
@@ -397,9 +399,11 @@ unsafe impl PeriAddress for AES_OUT {
 }
 
 #[cfg(feature = "cryp")]
-pub struct CRYP_IN(());
+#[non_exhaustive]
+pub struct CRYP_IN;
 #[cfg(feature = "cryp")]
-pub struct CRYP_OUT(());
+#[non_exhaustive]
+pub struct CRYP_OUT;
 
 #[cfg(feature = "cryp")]
 unsafe impl PeriAddress for CRYP_IN {
