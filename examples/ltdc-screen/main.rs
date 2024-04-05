@@ -48,22 +48,49 @@ fn main() -> ! {
     let gpioj = perif.GPIOJ.split();
     let gpiok = perif.GPIOK.split();
 
+    // This is likely the pinout for the for the 32F746GDISCOVERY
+    // (https://www.st.com/resource/en/user_manual/um1670-discovery-kit-with-stm32f429zi-mcu-stmicroelectronics.pdf)
+    // Define each pin with a name that reflects its purpose according to the pinout table
+    let ltdc_r0 = gpioi.pi15; // LTDC_R0
+    let ltdc_r1 = gpioj.pj0;  // LTDC_R1
+    let ltdc_r2 = gpioj.pj1;  // LTDC_R2
+    let ltdc_r3 = gpioj.pj2;  // LTDC_R3
+    let ltdc_r4 = gpioj.pj3;  // LTDC_R4
+    let ltdc_r5 = gpioj.pj4;  // LTDC_R5
+    let ltdc_r6 = gpioj.pj5;  // LTDC_R6
+    let ltdc_r7 = gpioj.pj6;  // LTDC_R7
+
+    let ltdc_g0 = gpioj.pj7;  // LTDC_G0
+    let ltdc_g1 = gpioj.pj8;  // LTDC_G1
+    let ltdc_g2 = gpioj.pj9;  // LTDC_G2
+    let ltdc_g3 = gpioj.pj10; // LTDC_G3
+    let ltdc_g4 = gpioj.pj11; // LTDC_G4
+    let ltdc_g5 = gpiok.pk0;  // LTDC_G5
+    let ltdc_g6 = gpiok.pk1;  // LTDC_G6
+    let ltdc_g7 = gpiok.pk2;  // LTDC_G7
+
+    let ltdc_b0 = gpioe.pe4;  // LTDC_B0
+    let ltdc_b1 = gpioj.pj13; // LTDC_B1
+    let ltdc_b2 = gpioj.pj14; // LTDC_B2
+    let ltdc_b3 = gpioj.pj15; // LTDC_B3
+    let ltdc_b4 = gpiog.pg12; // LTDC_B4
+    let ltdc_b5 = gpiok.pk4;  // LTDC_B5
+    let ltdc_b6 = gpiok.pk5;  // LTDC_B6
+    let ltdc_b7 = gpiok.pk6;  // LTDC_B7
+
+    let ltdc_hsync = gpioi.pi10; // LTDC_HSYNC
+    let ltdc_vsync = gpioi.pi9;  // LTDC_VSYNC
+    let ltdc_de = gpiok.pk7;     // LTDC_DE
+    let ltdc_clk = gpioi.pi14;   // LTDC_CLK
+
     let pins = LtdcPins::new(
-        RedPins::new(
-            gpioi.pi15, gpioj.pj0, gpioj.pj1, gpioj.pj2, gpioj.pj3, gpioj.pj4, gpioj.pj5, gpioj.pj6,
-        ),
-        GreenPins::new(
-            gpioj.pj7, gpioj.pj8, gpioj.pj9, gpioj.pj10, gpioj.pj11, gpiok.pk0, gpiok.pk1,
-            gpiok.pk2,
-        ),
-        BluePins::new(
-            gpioe.pe4, gpioj.pj13, gpioj.pj14, gpioj.pj15, gpiog.pg12, gpiok.pk4, gpiok.pk5,
-            gpiok.pk6,
-        ),
-        gpioi.pi10,
-        gpioi.pi9,
-        gpiok.pk7,
-        gpioi.pi14,
+        RedPins::new(ltdc_r0, ltdc_r1, ltdc_r2, ltdc_r3, ltdc_r4, ltdc_r5, ltdc_r6, ltdc_r7),
+        GreenPins::new(ltdc_g0, ltdc_g1, ltdc_g2, ltdc_g3, ltdc_g4, ltdc_g5, ltdc_g6, ltdc_g7),
+        BluePins::new(ltdc_b0, ltdc_b1, ltdc_b2, ltdc_b3, ltdc_b4, ltdc_b5, ltdc_b6, ltdc_b7),
+        ltdc_hsync,
+        ltdc_vsync,
+        ltdc_de,
+        ltdc_clk,
     );
 
     // HSE osc out in High Z
