@@ -26,11 +26,13 @@ use crate::hal::{
         ColorCoding, DsiChannel, DsiCmdModeTransmissionKind, DsiConfig, DsiHost, DsiInterrupts,
         DsiMode, DsiPhyTimers, DsiPllConfig, DsiVideoMode, LaneCount,
     },
+    i2c::I2c,
     ltdc::{DisplayConfig, DisplayController, PixelFormat},
     pac::{CorePeripherals, Peripherals},
     prelude::*,
 };
 
+use ft6x06::Ft6X06;
 use otm8009a::{Otm8009A, Otm8009AConfig};
 
 // NT35510 Constants and Driver (inline implementation for B08 board support)
@@ -342,13 +344,67 @@ fn main() -> ! {
         }
     }
 
-    defmt::info!("Outputting Color/BER test patterns...");
-    let delay_ms = 5000u32;
+    // ========== INITIALIZE TOUCHSCREEN ==========
+    defmt::info!("Initializing touchscreen");
+    let gpiob = dp.GPIOB.split(&mut rcc);
+    let gpioc = dp.GPIOC.split(&mut rcc);
+    
+    let scl = gpiob.pb8;
+    let sda = gpiob.pb9;
+    let mut i2c = I2c::new(dp.I2C1, (scl, sda), 400.kHz(), &mut rcc);
+    
+    let ts_int = gpioc.pc0.into_pull_down_input();
+    let mut touch = Ft6X06::new(&i2c, 0x38, ts_int).unwrap();
+    
+    // Run internal calibration of touchscreen (following display-touch.rs pattern)
+    let tsc = touch.ts_calibration(&mut i2c, &mut delay);
+    match tsc {
+        Err(e) => defmt::warn!("Error from ts_calibration: {}", e),
+        Ok(u) => defmt::info!("ts_calibration returned {}", u),
+    }
+
+    defmt::info!("Outputting Color/BER test patterns. Touch the screen to see coordinates!");
+    
+    let mut current_pattern = 0; // 0 for color test, 1 for BER test
+    let mut pattern_timer = 0u32;
+    let pattern_switch_delay = 500; // Switch patterns every 500 iterations (similar to display-touch.rs timing)
+    
+    // Start with color test
+    dsi_host.enable_color_test();
+    defmt::info!("Color test pattern");
+    
     loop {
-        dsi_host.enable_color_test();
-        delay.delay_ms(delay_ms);
-        dsi_host.enable_ber_test();
-        delay.delay_ms(delay_ms);
+        // Check for touch events (similar to display-touch.rs approach)
+        let t = touch.detect_touch(&mut i2c);
+        match t {
+            Ok(num) if num > 0 => {
+                defmt::info!("Number of touches: {}", num);
+                // Only get coordinates if touch detected
+                if let Ok(point) = touch.get_touch(&mut i2c, 1) {
+                    defmt::info!("Touch at x={}, y={} - weight: {}", point.x, point.y, point.weight);
+                }
+            },
+            Ok(_) => {}, // No touches, silent
+            Err(_) => {} // I2C error, silent to avoid spam
+        }
+        
+        // Handle pattern switching on a timer (much less frequent than touch checking)
+        pattern_timer += 1;
+        if pattern_timer >= pattern_switch_delay {
+            pattern_timer = 0;
+            current_pattern = 1 - current_pattern;
+            
+            if current_pattern == 0 {
+                dsi_host.enable_color_test();
+                defmt::info!("Color test pattern");
+            } else {
+                dsi_host.enable_ber_test();
+                defmt::info!("BER test pattern");
+            }
+        }
+        
+        // Small delay between iterations (similar to display-touch.rs)
+        delay.delay_ms(10u32);
     }
 }
 
