@@ -7,6 +7,20 @@
 //! Runtime auto-detection is used by default. For fixed hardware you can force one panel with
 //! `nt35510-only` or `otm8009a-only`.
 //!
+//! ## Build variants
+//! ```bash
+//! # Runtime detection (default)
+//! cargo check --example f469disco-lcd-test --features="stm32f469,defmt"
+//!
+//! # Force NT35510 for B08 boards
+//! cargo check --example f469disco-lcd-test --features="stm32f469,defmt,nt35510-only"
+//!
+//! # Force OTM8009A for B07 and earlier boards
+//! cargo check --example f469disco-lcd-test --features="stm32f469,defmt,otm8009a-only"
+//! ```
+//!
+//! The `nt35510-only` and `otm8009a-only` features are mutually exclusive.
+//!
 //! Run as:
 //! cargo run --release --example f469disco-lcd-test --features="stm32f469,defmt"
 
@@ -42,6 +56,9 @@ use otm8009a::{Otm8009A, Otm8009AConfig};
 
 #[cfg(all(feature = "nt35510-only", feature = "otm8009a-only"))]
 compile_error!("features `nt35510-only` and `otm8009a-only` cannot be enabled together");
+
+const TOUCH_ERROR_LOG_THROTTLE: u8 = 16;
+const TOUCH_MAX_RETRIES: u8 = 3;
 
 // Display configurations for different controllers
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -142,14 +159,16 @@ fn main() -> ! {
     };
 
     defmt::info!("Initializing DSI {:?} {:?}", dsi_config, dsi_pll_config);
-    let mut dsi_host = DsiHost::init(
+    let mut dsi_host = match DsiHost::init(
         dsi_pll_config,
         NT35510_DISPLAY_CONFIG,
         dsi_config,
         dp.DSI,
         &mut rcc,
-    )
-    .unwrap();
+    ) {
+        Ok(host) => host,
+        Err(e) => defmt::panic!("DSI host initialization failed: {:?}", e),
+    };
 
     dsi_host.configure_phy_timers(DsiPhyTimers {
         dataline_hs2lp: 35,
@@ -186,7 +205,9 @@ fn main() -> ! {
         LcdController::Nt35510 => {
             defmt::info!("Initializing NT35510 (B08 revision)");
             let mut nt35510 = nt35510::Nt35510::new();
-            nt35510.init(&mut dsi_host, &mut delay).unwrap();
+            if let Err(e) = nt35510.init(&mut dsi_host, &mut delay) {
+                defmt::panic!("NT35510 init failed: {:?}", e);
+            }
         }
         LcdController::Otm8009a => {
             defmt::info!("Initializing OTM8009A (B07 and earlier revisions)");
@@ -198,9 +219,9 @@ fn main() -> ! {
                 rows: HEIGHT as u16,
             };
             let mut otm8009a = Otm8009A::new();
-            otm8009a
-                .init(&mut dsi_host, otm8009a_config, &mut delay)
-                .unwrap();
+            if let Err(e) = otm8009a.init(&mut dsi_host, otm8009a_config, &mut delay) {
+                defmt::panic!("OTM8009A init failed: {:?}", e);
+            }
         }
     }
 
@@ -214,18 +235,28 @@ fn main() -> ! {
     let mut i2c = I2c::new(dp.I2C1, (scl, sda), 400.kHz(), &mut rcc);
 
     let ts_int = gpioc.pc0.into_pull_down_input();
-    let mut touch = Ft6X06::new(&i2c, 0x38, ts_int).unwrap();
+    let mut touch = match Ft6X06::new(&i2c, 0x38, ts_int) {
+        Ok(touch) => Some(touch),
+        Err(e) => {
+            defmt::warn!("Touch controller unavailable: {}", e);
+            None
+        }
+    };
 
     // Run internal calibration of touchscreen (following display-touch.rs pattern)
-    let tsc = touch.ts_calibration(&mut i2c, &mut delay);
-    match tsc {
-        Err(e) => defmt::warn!("Error from ts_calibration: {}", e),
-        Ok(u) => defmt::info!("ts_calibration returned {}", u),
+    if let Some(touch) = touch.as_mut() {
+        let tsc = touch.ts_calibration(&mut i2c, &mut delay);
+        match tsc {
+            Err(e) => defmt::warn!("Error from ts_calibration: {}", e),
+            Ok(u) => defmt::info!("ts_calibration returned {}", u),
+        }
+    } else {
+        defmt::warn!("Touch initialization failed; running display pattern without touch input");
     }
 
     defmt::info!("Outputting Color/BER test patterns. Touch to toggle test mode.");
 
-    let mut current_pattern = 0;
+    let mut current_pattern_is_color = true;
     let mut pattern_timer = 0u32;
     let pattern_switch_delay = 500;
     let mut touch_error_throttle = 0u8;
@@ -233,54 +264,125 @@ fn main() -> ! {
     dsi_host.enable_color_test();
 
     loop {
-        match touch.detect_touch(&mut i2c) {
-            Ok(num) if num > 0 => {
+        if let Some(touch) = touch.as_mut() {
+            let mut detected_touches = None;
+            for attempt in 0..TOUCH_MAX_RETRIES {
+                match touch.detect_touch(&mut i2c) {
+                    Ok(num) => {
+                        detected_touches = Some(num);
+                        break;
+                    }
+                    Err(e) => {
+                        touch_error_throttle = touch_error_throttle.wrapping_add(1);
+                        if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
+                            defmt::warn!(
+                                "detect_touch read error (attempt {}): {}",
+                                attempt + 1,
+                                e
+                            );
+                        }
+                        delay.delay_us(500u32);
+                    }
+                }
+            }
+
+            let Some(num) = detected_touches else {
+                touch_error_throttle = touch_error_throttle.wrapping_add(1);
+                if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
+                    defmt::warn!(
+                        "detect_touch timed out after {} attempts",
+                        TOUCH_MAX_RETRIES
+                    );
+                }
+                pattern_loop_housekeeping(
+                    &mut dsi_host,
+                    &mut current_pattern_is_color,
+                    &mut pattern_timer,
+                    pattern_switch_delay,
+                );
+                delay.delay_ms(10u32);
+                continue;
+            };
+
+            if num > 0 {
                 defmt::info!("Number of touches: {}", num);
-                match touch.get_touch(&mut i2c, 1) {
-                    Ok(point) => {
+
+                let mut touch_point = None;
+                for attempt in 0..TOUCH_MAX_RETRIES {
+                    match touch.get_touch(&mut i2c, 1) {
+                        Ok(point) => {
+                            touch_point = Some(point);
+                            break;
+                        }
+                        Err(e) => {
+                            touch_error_throttle = touch_error_throttle.wrapping_add(1);
+                            if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
+                                defmt::warn!(
+                                    "get_touch read error (attempt {}): {}",
+                                    attempt + 1,
+                                    e
+                                );
+                            }
+                            delay.delay_us(500u32);
+                        }
+                    }
+                }
+
+                match touch_point {
+                    Some(point) => {
                         defmt::info!(
                             "Touch at x={}, y={} - weight: {}",
                             point.x,
                             point.y,
                             point.weight
                         );
-                        current_pattern = 1 - current_pattern;
-                        if current_pattern == 0 {
+                        current_pattern_is_color = !current_pattern_is_color;
+                        if current_pattern_is_color {
                             dsi_host.enable_color_test();
                         } else {
                             dsi_host.enable_ber_test();
                         }
                     }
-                    Err(e) => {
+                    None => {
                         touch_error_throttle = touch_error_throttle.wrapping_add(1);
-                        if touch_error_throttle % 16 == 0 {
-                            defmt::warn!("get_touch failed: {}", e);
+                        if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
+                            defmt::warn!(
+                                "get_touch timed out after {} attempts",
+                                TOUCH_MAX_RETRIES
+                            );
                         }
                     }
                 }
             }
-            Ok(_) => {}
-            Err(e) => {
-                touch_error_throttle = touch_error_throttle.wrapping_add(1);
-                if touch_error_throttle % 16 == 0 {
-                    defmt::warn!("detect_touch failed: {}", e);
-                }
-            }
         }
 
-        pattern_timer += 1;
-        if pattern_timer >= pattern_switch_delay {
-            pattern_timer = 0;
-            current_pattern = 1 - current_pattern;
-
-            if current_pattern == 0 {
-                dsi_host.enable_color_test();
-            } else {
-                dsi_host.enable_ber_test();
-            }
-        }
+        pattern_loop_housekeeping(
+            &mut dsi_host,
+            &mut current_pattern_is_color,
+            &mut pattern_timer,
+            pattern_switch_delay,
+        );
 
         delay.delay_ms(10u32);
+    }
+}
+
+fn pattern_loop_housekeeping(
+    dsi_host: &mut DsiHost,
+    current_pattern_is_color: &mut bool,
+    pattern_timer: &mut u32,
+    pattern_switch_delay: u32,
+) {
+    *pattern_timer += 1;
+    if *pattern_timer >= pattern_switch_delay {
+        *pattern_timer = 0;
+        *current_pattern_is_color = !*current_pattern_is_color;
+
+        if *current_pattern_is_color {
+            dsi_host.enable_color_test();
+        } else {
+            dsi_host.enable_ber_test();
+        }
     }
 }
 
@@ -309,16 +411,29 @@ fn detect_lcd_controller(
 ) -> LcdController {
     defmt::info!("Auto-detecting LCD controller...");
 
+    const PROBE_RETRIES: u8 = 3;
     let mut nt35510 = nt35510::Nt35510::new();
-    match nt35510.probe(dsi_host, delay) {
-        Ok(_) => {
-            defmt::info!("NT35510 (B08) detected successfully");
-            LcdController::Nt35510
+    for attempt in 1..=PROBE_RETRIES {
+        match nt35510.probe(dsi_host, delay) {
+            Ok(_) => {
+                defmt::info!("NT35510 (B08) detected successfully on attempt {}", attempt);
+                return LcdController::Nt35510;
+            }
+            Err(nt35510::Nt35510Error::DsiRead) => {
+                defmt::warn!("NT35510 probe attempt {} failed: DSI read error", attempt);
+            }
+            Err(nt35510::Nt35510Error::ProbeMismatch(id)) => {
+                defmt::info!(
+                    "NT35510 probe attempt {} mismatch: RDID1=0x{:02x}",
+                    attempt,
+                    id
+                );
+            }
         }
-        Err(e) => {
-            defmt::info!("NT35510 detection failed: {:?}", e);
-            defmt::info!("Falling back to OTM8009A (B07 and earlier revisions)");
-            LcdController::Otm8009a
-        }
+
+        delay.delay_us(5_000u32);
     }
+
+    defmt::info!("Falling back to OTM8009A (B07 and earlier revisions)");
+    LcdController::Otm8009a
 }
