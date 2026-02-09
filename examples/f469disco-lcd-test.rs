@@ -31,6 +31,7 @@
 extern crate cortex_m;
 extern crate cortex_m_rt as rt;
 
+#[cfg(not(feature = "otm8009a-only"))]
 mod nt35510;
 
 use cortex_m_rt::entry;
@@ -52,6 +53,7 @@ use crate::hal::{
 };
 
 use ft6x06::Ft6X06;
+#[cfg(not(feature = "nt35510-only"))]
 use otm8009a::{Otm8009A, Otm8009AConfig};
 
 #[cfg(all(feature = "nt35510-only", feature = "otm8009a-only"))]
@@ -203,25 +205,35 @@ fn main() -> ! {
     // Initialize the detected LCD controller
     match controller {
         LcdController::Nt35510 => {
-            defmt::info!("Initializing NT35510 (B08 revision)");
-            let mut nt35510 = nt35510::Nt35510::new();
-            if let Err(e) = nt35510.init(&mut dsi_host, &mut delay) {
-                defmt::panic!("NT35510 init failed: {:?}", e);
+            #[cfg(not(feature = "otm8009a-only"))]
+            {
+                defmt::info!("Initializing NT35510 (B08 revision)");
+                let mut nt35510 = nt35510::Nt35510::new();
+                if let Err(e) = nt35510.init(&mut dsi_host, &mut delay) {
+                    defmt::panic!("NT35510 init failed: {:?}", e);
+                }
             }
+            #[cfg(feature = "otm8009a-only")]
+            unreachable!();
         }
         LcdController::Otm8009a => {
-            defmt::info!("Initializing OTM8009A (B07 and earlier revisions)");
-            let otm8009a_config = Otm8009AConfig {
-                frame_rate: otm8009a::FrameRate::_60Hz,
-                mode: otm8009a::Mode::Portrait,
-                color_map: otm8009a::ColorMap::Rgb,
-                cols: WIDTH as u16,
-                rows: HEIGHT as u16,
-            };
-            let mut otm8009a = Otm8009A::new();
-            if let Err(e) = otm8009a.init(&mut dsi_host, otm8009a_config, &mut delay) {
-                defmt::panic!("OTM8009A init failed: {:?}", e);
+            #[cfg(not(feature = "nt35510-only"))]
+            {
+                defmt::info!("Initializing OTM8009A (B07 and earlier revisions)");
+                let otm8009a_config = Otm8009AConfig {
+                    frame_rate: otm8009a::FrameRate::_60Hz,
+                    mode: otm8009a::Mode::Portrait,
+                    color_map: otm8009a::ColorMap::Rgb,
+                    cols: WIDTH as u16,
+                    rows: HEIGHT as u16,
+                };
+                let mut otm8009a = Otm8009A::new();
+                if let Err(e) = otm8009a.init(&mut dsi_host, otm8009a_config, &mut delay) {
+                    defmt::panic!("OTM8009A init failed: {:?}", e);
+                }
             }
+            #[cfg(feature = "nt35510-only")]
+            unreachable!();
         }
     }
 
