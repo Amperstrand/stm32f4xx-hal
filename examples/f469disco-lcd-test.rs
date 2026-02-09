@@ -32,6 +32,7 @@ extern crate cortex_m;
 extern crate cortex_m_rt as rt;
 
 #[cfg(not(feature = "otm8009a-only"))]
+#[path = "f469disco/nt35510.rs"]
 mod nt35510;
 
 use cortex_m_rt::entry;
