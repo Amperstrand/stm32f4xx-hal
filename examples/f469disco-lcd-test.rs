@@ -122,6 +122,11 @@ pub const OTM8009A_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
     pixel_clock_pol: true,
 };
 
+#[cfg(not(feature = "otm8009a-only"))]
+const DSI_PROBE_DISPLAY_CONFIG: DisplayConfig = NT35510_DISPLAY_CONFIG;
+#[cfg(feature = "otm8009a-only")]
+const DSI_PROBE_DISPLAY_CONFIG: DisplayConfig = OTM8009A_DISPLAY_CONFIG;
+
 #[entry]
 fn main() -> ! {
     let dp = Peripherals::take().unwrap();
@@ -169,7 +174,7 @@ fn main() -> ! {
     defmt::info!("Initializing DSI {:?} {:?}", dsi_config, dsi_pll_config);
     let mut dsi_host = match DsiHost::init(
         dsi_pll_config,
-        NT35510_DISPLAY_CONFIG,
+        DSI_PROBE_DISPLAY_CONFIG,
         dsi_config,
         dp.DSI,
         &mut rcc,
