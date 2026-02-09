@@ -1,5 +1,6 @@
 //! NT35510 DSI LCD controller support for STM32F469I-DISCO B08 boards.
 
+use core::result::Result;
 use embedded_display_controller::dsi::{DsiHostCtrlIo, DsiReadCommand, DsiWriteCommand};
 use embedded_hal_02::blocking::delay::DelayUs;
 use stm32f4xx_hal::dsi::DsiHost;
