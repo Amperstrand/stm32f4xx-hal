@@ -66,14 +66,18 @@ const TOUCH_MAX_RETRIES: u8 = 3;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LcdController {
+    #[cfg(not(feature = "otm8009a-only"))]
     Nt35510,
+    #[cfg(not(feature = "nt35510-only"))]
     Otm8009a,
 }
 
 impl LcdController {
     fn display_config(self) -> DisplayConfig {
         match self {
+            #[cfg(not(feature = "otm8009a-only"))]
             Self::Nt35510 => NT35510_DISPLAY_CONFIG,
+            #[cfg(not(feature = "nt35510-only"))]
             Self::Otm8009a => OTM8009A_DISPLAY_CONFIG,
         }
     }
@@ -83,6 +87,7 @@ pub const WIDTH: usize = 480;
 pub const HEIGHT: usize = 800;
 
 // NT35510 timing (B08 revision)
+#[cfg(not(feature = "otm8009a-only"))]
 pub const NT35510_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
     active_width: WIDTH as _,
     active_height: HEIGHT as _,
@@ -100,6 +105,7 @@ pub const NT35510_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
 };
 
 // OTM8009A timing (B07 and earlier revisions)
+#[cfg(not(feature = "nt35510-only"))]
 pub const OTM8009A_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
     active_width: WIDTH as _,
     active_height: HEIGHT as _,
@@ -204,36 +210,28 @@ fn main() -> ! {
 
     // Initialize the detected LCD controller
     match controller {
+        #[cfg(not(feature = "otm8009a-only"))]
         LcdController::Nt35510 => {
-            #[cfg(not(feature = "otm8009a-only"))]
-            {
-                defmt::info!("Initializing NT35510 (B08 revision)");
-                let mut nt35510 = nt35510::Nt35510::new();
-                if let Err(e) = nt35510.init(&mut dsi_host, &mut delay) {
-                    defmt::panic!("NT35510 init failed: {:?}", e);
-                }
+            defmt::info!("Initializing NT35510 (B08 revision)");
+            let mut nt35510 = nt35510::Nt35510::new();
+            if let Err(e) = nt35510.init(&mut dsi_host, &mut delay) {
+                defmt::panic!("NT35510 init failed: {:?}", e);
             }
-            #[cfg(feature = "otm8009a-only")]
-            unreachable!();
         }
+        #[cfg(not(feature = "nt35510-only"))]
         LcdController::Otm8009a => {
-            #[cfg(not(feature = "nt35510-only"))]
-            {
-                defmt::info!("Initializing OTM8009A (B07 and earlier revisions)");
-                let otm8009a_config = Otm8009AConfig {
-                    frame_rate: otm8009a::FrameRate::_60Hz,
-                    mode: otm8009a::Mode::Portrait,
-                    color_map: otm8009a::ColorMap::Rgb,
-                    cols: WIDTH as u16,
-                    rows: HEIGHT as u16,
-                };
-                let mut otm8009a = Otm8009A::new();
-                if let Err(e) = otm8009a.init(&mut dsi_host, otm8009a_config, &mut delay) {
-                    defmt::panic!("OTM8009A init failed: {:?}", e);
-                }
+            defmt::info!("Initializing OTM8009A (B07 and earlier revisions)");
+            let otm8009a_config = Otm8009AConfig {
+                frame_rate: otm8009a::FrameRate::_60Hz,
+                mode: otm8009a::Mode::Portrait,
+                color_map: otm8009a::ColorMap::Rgb,
+                cols: WIDTH as u16,
+                rows: HEIGHT as u16,
+            };
+            let mut otm8009a = Otm8009A::new();
+            if let Err(e) = otm8009a.init(&mut dsi_host, otm8009a_config, &mut delay) {
+                defmt::panic!("OTM8009A init failed: {:?}", e);
             }
-            #[cfg(feature = "nt35510-only")]
-            unreachable!();
         }
     }
 
