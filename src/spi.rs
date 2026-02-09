@@ -161,6 +161,7 @@ pub struct Inner<SPI: Instance> {
 
 /// Spi in Master mode
 #[derive(Debug)]
+#[allow(clippy::type_complexity)]
 pub struct Spi<SPI: Instance, const BIDI: bool = false, W = u8> {
     inner: Inner<SPI>,
     pins: (Option<SPI::Sck>, Option<SPI::Miso>, Option<SPI::Mosi>),
@@ -182,6 +183,7 @@ impl<SPI: Instance, const BIDI: bool, W> DerefMut for Spi<SPI, BIDI, W> {
 
 /// Spi in Slave mode
 #[derive(Debug)]
+#[allow(clippy::type_complexity)]
 pub struct SpiSlave<SPI: Instance, const BIDI: bool = false, W = u8> {
     inner: Inner<SPI>,
     pins: (
@@ -957,7 +959,7 @@ impl<SPI: Instance> DmaBuilder<SPI> {
 unsafe impl<SPI: Instance> PeriAddress for Rx<SPI> {
     #[inline(always)]
     fn address(&self) -> u32 {
-        unsafe { (*SPI::ptr()).dr().as_ptr() as u32 }
+        unsafe { (*SPI::PTR).dr().as_ptr() as u32 }
     }
 
     type MemSize = u8;
@@ -971,7 +973,7 @@ unsafe impl<SPI, STREAM, const CHANNEL: u8> DMASet<STREAM, CHANNEL, PeripheralTo
 unsafe impl<SPI: Instance> PeriAddress for Tx<SPI> {
     #[inline(always)]
     fn address(&self) -> u32 {
-        unsafe { (*SPI::ptr()).dr().as_ptr() as u32 }
+        unsafe { (*SPI::PTR).dr().as_ptr() as u32 }
     }
 
     type MemSize = u8;

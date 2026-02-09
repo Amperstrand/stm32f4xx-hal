@@ -7,28 +7,36 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v0.23.0] - 2025-09-22
+
  - Implement `embedded_hal::i2c::I2c` for `I2cMasterDma` [#838]
  - Back to `stm32f4`
  - Implement `Ptr`, `Sealed`, `Steal` for generic `Periph` [#834]
+ - Rename `ErasedPin` to `AnyPin` [#841]
  - Use `&mut RCC` for `PER::enable/reset`
  - Unmacro `Adc` [#832]
  - Use `write` instead of `modify` to clear flags [#829]
  - Bump `stm32f4-staging` to 0.18, update other dependencies [#831]
  - `serial` mod refactor [#833] [#839]
+ - Add "capture" support for timers [#830]
  - FMPI2c APB timings [#770]
  - Fefactor FMPI2c `embedded-hal` implementations [#784]
  - remove `NoPin`, use `Option` instead [#813]
+ - Implement `Calibrate` stub for ADC2 and ADC3 [#859] 
 
 [#770]: https://github.com/stm32-rs/stm32f4xx-hal/pull/770
 [#784]: https://github.com/stm32-rs/stm32f4xx-hal/pull/784
 [#813]: https://github.com/stm32-rs/stm32f4xx-hal/pull/813
 [#829]: https://github.com/stm32-rs/stm32f4xx-hal/pull/829
+[#830]: https://github.com/stm32-rs/stm32f4xx-hal/pull/830
 [#831]: https://github.com/stm32-rs/stm32f4xx-hal/pull/831
 [#832]: https://github.com/stm32-rs/stm32f4xx-hal/pull/832
 [#833]: https://github.com/stm32-rs/stm32f4xx-hal/pull/833
 [#834]: https://github.com/stm32-rs/stm32f4xx-hal/pull/834
 [#838]: https://github.com/stm32-rs/stm32f4xx-hal/pull/838
 [#839]: https://github.com/stm32-rs/stm32f4xx-hal/pull/839
+[#841]: https://github.com/stm32-rs/stm32f4xx-hal/pull/841
+[#859]: https://github.com/stm32-rs/stm32f4xx-hal/pull/859
 
 ## [v0.22.1] - 2024-11-03
 
@@ -1112,7 +1120,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Support for stm32f407 and stm32f429.
 
-[Unreleased]: https://github.com/stm32-rs/stm32f4xx-hal/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/stm32-rs/stm32f4xx-hal/compare/v0.23.0...HEAD
+[v0.23.0]: https://github.com/stm32-rs/stm32f4xx-hal/compare/v0.22.1...v0.23.0
 [v0.22.1]: https://github.com/stm32-rs/stm32f4xx-hal/compare/v0.22.0...v0.22.1
 [v0.22.0]: https://github.com/stm32-rs/stm32f4xx-hal/compare/v0.21.0...v0.22.0
 [v0.21.0]: https://github.com/stm32-rs/stm32f4xx-hal/compare/v0.20.0...v0.21.0

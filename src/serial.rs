@@ -18,6 +18,7 @@ use core::fmt;
 use core::marker::PhantomData;
 use enumflags2::BitFlags;
 
+#[allow(unused)]
 use crate::pacext::uart::UartRB;
 mod hal_02;
 mod hal_1;
@@ -138,7 +139,7 @@ pub trait Instance:
     #[doc(hidden)]
     #[inline(always)]
     fn peri_address() -> u32 {
-        unsafe { &*Self::ptr() }.peri_address()
+        unsafe { &*Self::PTR }.peri_address()
     }
 }
 
