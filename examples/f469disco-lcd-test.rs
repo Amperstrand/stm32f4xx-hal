@@ -31,6 +31,8 @@
 extern crate cortex_m;
 extern crate cortex_m_rt as rt;
 
+#[cfg(not(feature = "otm8009a-only"))]
+#[path = "f469disco/nt35510.rs"]
 mod nt35510;
 
 use cortex_m_rt::entry;
@@ -52,6 +54,7 @@ use crate::hal::{
 };
 
 use ft6x06::Ft6X06;
+#[cfg(not(feature = "nt35510-only"))]
 use otm8009a::{Otm8009A, Otm8009AConfig};
 
 #[cfg(all(feature = "nt35510-only", feature = "otm8009a-only"))]
@@ -64,14 +67,18 @@ const TOUCH_MAX_RETRIES: u8 = 3;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LcdController {
+    #[cfg(not(feature = "otm8009a-only"))]
     Nt35510,
+    #[cfg(not(feature = "nt35510-only"))]
     Otm8009a,
 }
 
 impl LcdController {
     fn display_config(self) -> DisplayConfig {
         match self {
+            #[cfg(not(feature = "otm8009a-only"))]
             Self::Nt35510 => NT35510_DISPLAY_CONFIG,
+            #[cfg(not(feature = "nt35510-only"))]
             Self::Otm8009a => OTM8009A_DISPLAY_CONFIG,
         }
     }
@@ -81,6 +88,7 @@ pub const WIDTH: usize = 480;
 pub const HEIGHT: usize = 800;
 
 // NT35510 timing (B08 revision)
+#[cfg(not(feature = "otm8009a-only"))]
 pub const NT35510_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
     active_width: WIDTH as _,
     active_height: HEIGHT as _,
@@ -98,6 +106,7 @@ pub const NT35510_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
 };
 
 // OTM8009A timing (B07 and earlier revisions)
+#[cfg(not(feature = "nt35510-only"))]
 pub const OTM8009A_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
     active_width: WIDTH as _,
     active_height: HEIGHT as _,
@@ -113,6 +122,11 @@ pub const OTM8009A_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
     no_data_enable_pol: false,
     pixel_clock_pol: true,
 };
+
+#[cfg(not(feature = "otm8009a-only"))]
+const DSI_PROBE_DISPLAY_CONFIG: DisplayConfig = NT35510_DISPLAY_CONFIG;
+#[cfg(feature = "otm8009a-only")]
+const DSI_PROBE_DISPLAY_CONFIG: DisplayConfig = OTM8009A_DISPLAY_CONFIG;
 
 #[entry]
 fn main() -> ! {
@@ -161,7 +175,7 @@ fn main() -> ! {
     defmt::info!("Initializing DSI {:?} {:?}", dsi_config, dsi_pll_config);
     let mut dsi_host = match DsiHost::init(
         dsi_pll_config,
-        NT35510_DISPLAY_CONFIG,
+        DSI_PROBE_DISPLAY_CONFIG,
         dsi_config,
         dp.DSI,
         &mut rcc,
@@ -202,6 +216,7 @@ fn main() -> ! {
 
     // Initialize the detected LCD controller
     match controller {
+        #[cfg(not(feature = "otm8009a-only"))]
         LcdController::Nt35510 => {
             defmt::info!("Initializing NT35510 (B08 revision)");
             let mut nt35510 = nt35510::Nt35510::new();
@@ -209,6 +224,7 @@ fn main() -> ! {
                 defmt::panic!("NT35510 init failed: {:?}", e);
             }
         }
+        #[cfg(not(feature = "nt35510-only"))]
         LcdController::Otm8009a => {
             defmt::info!("Initializing OTM8009A (B07 and earlier revisions)");
             let otm8009a_config = Otm8009AConfig {
