@@ -10,16 +10,18 @@ const CMD_DISPON: u8 = 0x29;
 const CMD_COLMOD: u8 = 0x3A;
 const COLMOD_RGB888: u8 = 0x77;
 
-// Only used for probing
+// Used only for runtime probing; unused when `nt35510-only` or `otm8009a-only` features are enabled
 #[allow(dead_code)]
 const CMD_RDID1: u8 = 0xDA;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Nt35510Error {
+    // Used only in probe(); unused when `nt35510-only` or `otm8009a-only` features skip runtime detection
     #[allow(dead_code)]
     DsiRead,
     DsiWrite,
+    // Used only in probe(); unused when `nt35510-only` or `otm8009a-only` features skip runtime detection
     #[allow(dead_code)]
     ProbeMismatch(u8),
 }
@@ -33,6 +35,7 @@ impl Nt35510 {
         Self { initialized: false }
     }
 
+    // Used only for runtime detection; unused when `nt35510-only` or `otm8009a-only` features are enabled
     #[allow(dead_code)]
     pub fn probe<D: DelayUs<u32>>(
         &mut self,
