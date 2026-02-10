@@ -253,8 +253,8 @@ fn main() -> ! {
     let ts_int = gpioc.pc0.into_pull_down_input();
     let mut touch = match Ft6X06::new(&i2c, 0x38, ts_int) {
         Ok(touch) => Some(touch),
-        Err(e) => {
-            defmt::warn!("Touch controller unavailable: {}", e);
+        Err(_) => {
+            defmt::warn!("Touch controller unavailable");
             None
         }
     };
@@ -263,7 +263,7 @@ fn main() -> ! {
     if let Some(touch) = touch.as_mut() {
         let tsc = touch.ts_calibration(&mut i2c, &mut delay);
         match tsc {
-            Err(e) => defmt::warn!("Error from ts_calibration: {}", e),
+            Err(_) => defmt::warn!("Error from ts_calibration"),
             Ok(u) => defmt::info!("ts_calibration returned {}", u),
         }
     } else {
@@ -288,13 +288,12 @@ fn main() -> ! {
                         detected_touches = Some(num);
                         break;
                     }
-                    Err(e) => {
+                    Err(_) => {
                         touch_error_throttle = touch_error_throttle.wrapping_add(1);
                         if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
                             defmt::warn!(
-                                "detect_touch read error (attempt {}): {}",
-                                attempt + 1,
-                                e
+                                "detect_touch read error (attempt {})",
+                                attempt + 1
                             );
                         }
                         delay.delay_us(500u32);
@@ -330,13 +329,12 @@ fn main() -> ! {
                             touch_point = Some(point);
                             break;
                         }
-                        Err(e) => {
+                        Err(_) => {
                             touch_error_throttle = touch_error_throttle.wrapping_add(1);
                             if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
                                 defmt::warn!(
-                                    "get_touch read error (attempt {}): {}",
-                                    attempt + 1,
-                                    e
+                                    "get_touch read error (attempt {})",
+                                    attempt + 1
                                 );
                             }
                             delay.delay_us(500u32);
@@ -437,6 +435,9 @@ fn detect_lcd_controller(
             }
             Err(nt35510::Nt35510Error::DsiRead) => {
                 defmt::warn!("NT35510 probe attempt {} failed: DSI read error", attempt);
+            }
+            Err(nt35510::Nt35510Error::DsiWrite) => {
+                defmt::warn!("NT35510 probe attempt {} failed: DSI write error", attempt);
             }
             Err(nt35510::Nt35510Error::ProbeMismatch(id)) => {
                 defmt::info!(

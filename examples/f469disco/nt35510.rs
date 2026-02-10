@@ -5,17 +5,22 @@ use embedded_display_controller::dsi::{DsiHostCtrlIo, DsiReadCommand, DsiWriteCo
 use embedded_hal_02::blocking::delay::DelayUs;
 use stm32f4xx_hal::dsi::DsiHost;
 
-const CMD_RDID1: u8 = 0xDA;
 const CMD_SLPOUT: u8 = 0x11;
 const CMD_DISPON: u8 = 0x29;
 const CMD_COLMOD: u8 = 0x3A;
 const COLMOD_RGB888: u8 = 0x77;
 
+// Only used for probing
+#[allow(dead_code)]
+const CMD_RDID1: u8 = 0xDA;
+
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Nt35510Error {
+    #[allow(dead_code)]
     DsiRead,
     DsiWrite,
+    #[allow(dead_code)]
     ProbeMismatch(u8),
 }
 
@@ -28,6 +33,7 @@ impl Nt35510 {
         Self { initialized: false }
     }
 
+    #[allow(dead_code)]
     pub fn probe<D: DelayUs<u32>>(
         &mut self,
         dsi_host: &mut DsiHost,
