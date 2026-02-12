@@ -136,7 +136,10 @@ fn main() -> ! {
 
     let fb_size = WIDTH as usize * HEIGHT as usize;
     let sdram_ptr: *mut u32 = sdram.init(&mut delay);
-    // Safety: the SDRAM has been initialised and the region is large enough for the framebuffer.
+    // Safety: `sdram.init` returns a pointer to the start of the initialised SDRAM bank
+    // which is always non-null (0xC000_0000 on the STM32F469I-DISCO). The region is 16 MiB
+    // (4M × 32-bit words), which is larger than our framebuffer (480 × 800 = 384 000 words).
+    assert!(!sdram_ptr.is_null(), "SDRAM init returned null pointer");
     let fb = unsafe { slice::from_raw_parts_mut(sdram_ptr, fb_size) };
     // Clear framebuffer to black
     for pixel in fb.iter_mut() {
@@ -146,6 +149,10 @@ fn main() -> ! {
     // ── 4. Initialise DSI Host (HAL transport layer) ────────────────────
     let ltdc_freq = 27_429.kHz();
 
+    // Safety: these PLL parameters are specific to the STM32F469I-DISCO board with 8 MHz HSE.
+    // VCO = (8 MHz / IDF=2) × 2 × NDIV=125 = 1 000 MHz
+    // PHY clock = VCO / (2 × ODF=1) = 500 MHz → lane byte clock = 62.5 MHz
+    // ECKDIV=4 → TX escape clock ≈ 15.6 MHz (must be < 20 MHz per spec)
     let dsi_pll_config = unsafe { DsiPllConfig::manual(125, 2, 0 /* div1 */, 4) };
 
     let dsi_config = DsiConfig {
