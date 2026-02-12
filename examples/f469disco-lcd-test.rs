@@ -62,7 +62,7 @@ compile_error!("features `nt35510-only` and `otm8009a-only` cannot be enabled to
 
 const TOUCH_ERROR_LOG_THROTTLE: u8 = 16;
 const TOUCH_MAX_RETRIES: u8 = 3;
-/// After this many consecutive detect_touch failures, stop polling and warn once.
+/// After this many consecutive detect_touch failures, stop polling with a one-time warning.
 const TOUCH_DISABLE_THRESHOLD: u16 = 100;
 
 // Display configurations for different controllers
@@ -297,10 +297,7 @@ fn main() -> ! {
 
     loop {
         if let Some(touch) = touch.as_mut() {
-            if touch_consecutive_failures >= TOUCH_DISABLE_THRESHOLD {
-                // Touch controller is unresponsive; skip polling to avoid log spam.
-                // This is reached after TOUCH_DISABLE_THRESHOLD consecutive failures.
-            } else {
+            if touch_consecutive_failures < TOUCH_DISABLE_THRESHOLD {
                 let mut detected_touches = None;
                 for attempt in 0..TOUCH_MAX_RETRIES {
                     match touch.detect_touch(&mut i2c) {
