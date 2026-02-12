@@ -37,6 +37,18 @@ impl Nt35510 {
 
     // Used only for runtime detection; unused when `nt35510-only` or `otm8009a-only` features are enabled
     #[allow(dead_code)]
+    /// Probes for the NT35510 LCD controller by reading the RDID1 register (0xDA).
+    ///
+    /// # Detection Logic
+    ///
+    /// | Controller | Board Rev | RDID1 Value |
+    /// |------------|-----------|-------------|
+    /// | NT35510    | B08       | 0x00        |
+    /// | OTM8009A   | B07/B01   | 0x40        |
+    ///
+    /// Returns `Ok(())` if NT35510 is detected (RDID1 == 0x00),
+    /// `Err(ProbeMismatch(value))` if another controller responds,
+    /// or `Err(DsiRead)` if DSI communication fails.
     pub fn probe<D: DelayUs<u32>>(
         &mut self,
         dsi_host: &mut DsiHost,
