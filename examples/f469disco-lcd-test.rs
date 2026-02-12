@@ -216,13 +216,11 @@ fn main() -> ! {
     defmt::info!("Detected LCD controller: {:?}", controller);
 
     defmt::info!("Initializing LTDC for detected controller");
-    let _display = DisplayController::<u32>::new(
+    let _display = DisplayController::<u32>::new_dsi(
         dp.LTDC,
         dp.DMA2D,
-        None,
         PixelFormat::ARGB8888,
         controller.display_config(),
-        Some(hse_freq),
     );
 
     dsi_host.set_command_mode_transmission_kind(DsiCmdModeTransmissionKind::AllInHighSpeed);
