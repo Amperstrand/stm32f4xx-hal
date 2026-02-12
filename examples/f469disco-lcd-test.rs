@@ -62,6 +62,8 @@ compile_error!("features `nt35510-only` and `otm8009a-only` cannot be enabled to
 
 const TOUCH_ERROR_LOG_THROTTLE: u8 = 16;
 const TOUCH_MAX_RETRIES: u8 = 3;
+/// After this many consecutive detect_touch failures, stop polling and warn once.
+const TOUCH_DISABLE_THRESHOLD: u16 = 100;
 
 // Display configurations for different controllers
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -128,6 +130,19 @@ const DSI_PROBE_DISPLAY_CONFIG: DisplayConfig = NT35510_DISPLAY_CONFIG;
 #[cfg(feature = "otm8009a-only")]
 const DSI_PROBE_DISPLAY_CONFIG: DisplayConfig = OTM8009A_DISPLAY_CONFIG;
 
+// Controller-specific DSI LP sizes.
+// OTM8009A uses smaller LP packets (4), while NT35510 requires larger ones (64).
+// Using incorrect values causes display artifacts (e.g. black stripe on OTM8009A with 64).
+#[cfg(feature = "otm8009a-only")]
+const DSI_LP_SIZE: u8 = 4;
+#[cfg(feature = "otm8009a-only")]
+const DSI_VLP_SIZE: u8 = 4;
+
+#[cfg(not(feature = "otm8009a-only"))]
+const DSI_LP_SIZE: u8 = 64;
+#[cfg(not(feature = "otm8009a-only"))]
+const DSI_VLP_SIZE: u8 = 64;
+
 #[entry]
 fn main() -> ! {
     let dp = Peripherals::take().unwrap();
@@ -168,8 +183,8 @@ fn main() -> ! {
         interrupts: DsiInterrupts::None,
         color_coding_host: ColorCoding::TwentyFourBits,
         color_coding_wrapper: ColorCoding::TwentyFourBits,
-        lp_size: 64,  // NT35510 compatible
-        vlp_size: 64, // NT35510 compatible
+        lp_size: DSI_LP_SIZE,
+        vlp_size: DSI_VLP_SIZE,
     };
 
     defmt::info!("Initializing DSI {:?} {:?}", dsi_config, dsi_pll_config);
@@ -276,64 +291,28 @@ fn main() -> ! {
     let mut pattern_timer = 0u32;
     let pattern_switch_delay = 500;
     let mut touch_error_throttle = 0u8;
+    let mut touch_consecutive_failures: u16 = 0;
 
     dsi_host.enable_color_test();
 
     loop {
         if let Some(touch) = touch.as_mut() {
-            let mut detected_touches = None;
-            for attempt in 0..TOUCH_MAX_RETRIES {
-                match touch.detect_touch(&mut i2c) {
-                    Ok(num) => {
-                        detected_touches = Some(num);
-                        break;
-                    }
-                    Err(_) => {
-                        touch_error_throttle = touch_error_throttle.wrapping_add(1);
-                        if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
-                            defmt::warn!(
-                                "detect_touch read error (attempt {})",
-                                attempt + 1
-                            );
-                        }
-                        delay.delay_us(500u32);
-                    }
-                }
-            }
-
-            let Some(num) = detected_touches else {
-                touch_error_throttle = touch_error_throttle.wrapping_add(1);
-                if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
-                    defmt::warn!(
-                        "detect_touch timed out after {} attempts",
-                        TOUCH_MAX_RETRIES
-                    );
-                }
-                pattern_loop_housekeeping(
-                    &mut dsi_host,
-                    &mut current_pattern_is_color,
-                    &mut pattern_timer,
-                    pattern_switch_delay,
-                );
-                delay.delay_ms(10u32);
-                continue;
-            };
-
-            if num > 0 {
-                defmt::info!("Number of touches: {}", num);
-
-                let mut touch_point = None;
+            if touch_consecutive_failures >= TOUCH_DISABLE_THRESHOLD {
+                // Touch controller is unresponsive; skip polling to avoid log spam.
+                // This is reached after TOUCH_DISABLE_THRESHOLD consecutive failures.
+            } else {
+                let mut detected_touches = None;
                 for attempt in 0..TOUCH_MAX_RETRIES {
-                    match touch.get_touch(&mut i2c, 1) {
-                        Ok(point) => {
-                            touch_point = Some(point);
+                    match touch.detect_touch(&mut i2c) {
+                        Ok(num) => {
+                            detected_touches = Some(num);
                             break;
                         }
                         Err(_) => {
                             touch_error_throttle = touch_error_throttle.wrapping_add(1);
                             if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
                                 defmt::warn!(
-                                    "get_touch read error (attempt {})",
+                                    "detect_touch read error (attempt {})",
                                     attempt + 1
                                 );
                             }
@@ -342,28 +321,83 @@ fn main() -> ! {
                     }
                 }
 
-                match touch_point {
-                    Some(point) => {
-                        defmt::info!(
-                            "Touch at x={}, y={} - weight: {}",
-                            point.x,
-                            point.y,
-                            point.weight
+                let Some(num) = detected_touches else {
+                    touch_consecutive_failures =
+                        touch_consecutive_failures.saturating_add(1);
+                    if touch_consecutive_failures == TOUCH_DISABLE_THRESHOLD {
+                        defmt::warn!(
+                            "Touch controller unresponsive after {} consecutive failures; disabling polling",
+                            TOUCH_DISABLE_THRESHOLD
                         );
-                        current_pattern_is_color = !current_pattern_is_color;
-                        if current_pattern_is_color {
-                            dsi_host.enable_color_test();
-                        } else {
-                            dsi_host.enable_ber_test();
-                        }
-                    }
-                    None => {
+                    } else {
                         touch_error_throttle = touch_error_throttle.wrapping_add(1);
                         if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
                             defmt::warn!(
-                                "get_touch timed out after {} attempts",
+                                "detect_touch timed out after {} attempts",
                                 TOUCH_MAX_RETRIES
                             );
+                        }
+                    }
+                    pattern_loop_housekeeping(
+                        &mut dsi_host,
+                        &mut current_pattern_is_color,
+                        &mut pattern_timer,
+                        pattern_switch_delay,
+                    );
+                    delay.delay_ms(10u32);
+                    continue;
+                };
+
+                // Reset consecutive failure counter on any successful detect
+                touch_consecutive_failures = 0;
+
+                if num > 0 {
+                    defmt::info!("Number of touches: {}", num);
+
+                    let mut touch_point = None;
+                    for attempt in 0..TOUCH_MAX_RETRIES {
+                        match touch.get_touch(&mut i2c, 1) {
+                            Ok(point) => {
+                                touch_point = Some(point);
+                                break;
+                            }
+                            Err(_) => {
+                                touch_error_throttle =
+                                    touch_error_throttle.wrapping_add(1);
+                                if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
+                                    defmt::warn!(
+                                        "get_touch read error (attempt {})",
+                                        attempt + 1
+                                    );
+                                }
+                                delay.delay_us(500u32);
+                            }
+                        }
+                    }
+
+                    match touch_point {
+                        Some(point) => {
+                            defmt::info!(
+                                "Touch at x={}, y={} - weight: {}",
+                                point.x,
+                                point.y,
+                                point.weight
+                            );
+                            current_pattern_is_color = !current_pattern_is_color;
+                            if current_pattern_is_color {
+                                dsi_host.enable_color_test();
+                            } else {
+                                dsi_host.enable_ber_test();
+                            }
+                        }
+                        None => {
+                            touch_error_throttle = touch_error_throttle.wrapping_add(1);
+                            if touch_error_throttle % TOUCH_ERROR_LOG_THROTTLE == 0 {
+                                defmt::warn!(
+                                    "get_touch timed out after {} attempts",
+                                    TOUCH_MAX_RETRIES
+                                );
+                            }
                         }
                     }
                 }
