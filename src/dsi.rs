@@ -1,12 +1,47 @@
-//! Display Serial Interface
+//! Display Serial Interface (DSI) Host driver
 //!
-//! Interface with MIPI D-PHY
+//! This module provides a **generic** DSI Host driver for STM32F4 MCUs with a MIPI D-PHY
+//! peripheral (STM32F469/F479). It handles PHY initialisation, PLL configuration, lane
+//! setup, and low-level command transport — but remains **agnostic** to any specific
+//! display panel.
+//!
+//! # Architecture – HAL = Transport, Crate = Driver
+//!
+//! The [`DsiHost`] struct implements the [`DsiHostCtrlIo`] trait from the
+//! [`embedded_display_controller`] crate. This trait exposes [`write`](DsiHostCtrlIo::write)
+//! and [`read`](DsiHostCtrlIo::read) methods that accept [`DsiWriteCommand`] and
+//! [`DsiReadCommand`] values respectively.
+//!
+//! External display-driver crates (e.g. [`otm8009a`](https://crates.io/crates/otm8009a))
+//! are generic over `D: DsiHostCtrlIo` and therefore accept a `&mut DsiHost` directly.
+//! This separation of concerns keeps panel-specific initialisation sequences **outside**
+//! the HAL while the HAL provides the reliable transport layer.
+//!
+//! ```text
+//! ┌────────────────────┐      DsiHostCtrlIo       ┌──────────────────────┐
+//! │   External Driver  │◄────────────────────────►│   stm32f4xx-hal      │
+//! │   (otm8009a, etc.) │  write() / read()        │   DsiHost            │
+//! └────────────────────┘                          └──────────────────────┘
+//! ```
+//!
+//! # Re-exports
+//!
+//! For convenience the key trait and command types are re-exported from this module so
+//! that users do not need to depend on `embedded_display_controller` directly:
+//!
+//! - [`DsiHostCtrlIo`] – the trait implemented by [`DsiHost`]
+//! - [`DsiWriteCommand`] – enum of DSI write command variants
+//! - [`DsiReadCommand`] – enum of DSI read command variants
 
 use crate::ltdc::DisplayConfig;
 use crate::rcc::{Enable, Rcc};
 use crate::{pac::DSI, time::Hertz};
 use core::cmp::{max, min};
-use embedded_display_controller::dsi::{DsiHostCtrlIo, DsiReadCommand, DsiWriteCommand};
+
+// Re-export the trait and command types so external drivers and examples can
+// import them from `stm32f4xx_hal::dsi` without a direct `embedded_display_controller`
+// dependency.
+pub use embedded_display_controller::dsi::{DsiHostCtrlIo, DsiReadCommand, DsiWriteCommand};
 
 const DSI_TIMEOUT_MS: usize = 100;
 

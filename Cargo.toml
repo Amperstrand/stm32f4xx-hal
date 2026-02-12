@@ -791,5 +791,9 @@ name = "fmc-sdram"
 required-features = ["stm32f469", "stm32-fmc"]
 
 [[example]]
+name = "stm32f469i_disco_screen"
+required-features = ["stm32f469", "stm32-fmc", "defmt"]
+
+[[example]]
 name = "rtic2-timer-input-capture"
 required-features = ["rtic2"]
