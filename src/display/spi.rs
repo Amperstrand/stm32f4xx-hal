@@ -90,6 +90,8 @@ macro_rules! impl_display_interface {
                     .write(buf)
                     .map_err(|_| $display_interface::DisplayError::BusWriteError),
 
+                // U16 is defined by display-interface as "same endianness as the
+                // system" – native byte order is therefore the correct encoding.
                 DataFormat::U16(buf) => {
                     let mut byte_buf = [0u8; BUF_SIZE];
                     for chunk in buf.chunks(BUF_SIZE / 2) {
@@ -155,15 +157,15 @@ macro_rules! impl_display_interface {
                     let mut byte_buf = [0u8; BUF_SIZE];
                     let mut i = 0;
                     for v in iter {
-                        let bytes = v.to_be_bytes();
-                        byte_buf[i] = bytes[0];
-                        byte_buf[i + 1] = bytes[1];
-                        i += 2;
-                        if i >= BUF_SIZE {
+                        if i + 2 > BUF_SIZE {
                             spi.write(&byte_buf[..i])
                                 .map_err(|_| $display_interface::DisplayError::BusWriteError)?;
                             i = 0;
                         }
+                        let bytes = v.to_be_bytes();
+                        byte_buf[i] = bytes[0];
+                        byte_buf[i + 1] = bytes[1];
+                        i += 2;
                     }
                     if i > 0 {
                         spi.write(&byte_buf[..i])
@@ -176,15 +178,15 @@ macro_rules! impl_display_interface {
                     let mut byte_buf = [0u8; BUF_SIZE];
                     let mut i = 0;
                     for v in iter {
-                        let bytes = v.to_le_bytes();
-                        byte_buf[i] = bytes[0];
-                        byte_buf[i + 1] = bytes[1];
-                        i += 2;
-                        if i >= BUF_SIZE {
+                        if i + 2 > BUF_SIZE {
                             spi.write(&byte_buf[..i])
                                 .map_err(|_| $display_interface::DisplayError::BusWriteError)?;
                             i = 0;
                         }
+                        let bytes = v.to_le_bytes();
+                        byte_buf[i] = bytes[0];
+                        byte_buf[i + 1] = bytes[1];
+                        i += 2;
                     }
                     if i > 0 {
                         spi.write(&byte_buf[..i])
