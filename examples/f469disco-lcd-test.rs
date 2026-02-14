@@ -456,7 +456,7 @@ fn detect_lcd_controller(
 
     defmt::info!("Display detection failed after {} attempts", PROBE_RETRIES);
     defmt::info!("This could indicate:");
-    defmt::info!("  1. A different display controller (e.g. OTM8009A on B07)");
+    defmt::info!("  1. OTM8009A display (B07 and earlier boards)");
     defmt::info!("  2. Display not connected or powered");
     defmt::info!("  3. DSI initialization issue");
     defmt::info!("Falling back to OTM8009A (B07 and earlier revisions)");
