@@ -156,11 +156,13 @@ impl stm32_fmc::DA12 for alt::Da12 {}
 impl stm32_fmc::DA13 for alt::Da13 {}
 impl stm32_fmc::DA14 for alt::Da14 {}
 impl stm32_fmc::DA15 for alt::Da15 {}
+#[cfg(any(feature = "f7", feature = "gpio-f469"))]
 impl stm32_fmc::INT for alt::Int {}
 impl stm32_fmc::NBL0 for alt::Nbl0 {}
 impl stm32_fmc::NBL1 for alt::Nbl1 {}
 impl stm32_fmc::NBL2 for alt::Nbl2 {}
 impl stm32_fmc::NBL3 for alt::Nbl3 {}
+#[cfg(feature = "f7")]
 impl stm32_fmc::NCE for alt::Nce {}
 impl stm32_fmc::NE1 for alt::Ne1 {}
 impl stm32_fmc::NE2 for alt::Ne2 {}
