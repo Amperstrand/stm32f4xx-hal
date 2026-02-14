@@ -108,6 +108,8 @@ pub mod otg_hs;
 pub mod rng;
 
 pub mod dma;
+#[cfg(any(feature = "dsihost", feature = "spi_display"))]
+pub mod display;
 #[cfg(feature = "dsihost")]
 pub mod dsi;
 pub mod dwt;

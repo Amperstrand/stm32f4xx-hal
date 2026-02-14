@@ -495,6 +495,9 @@ usb_hs = ["dep:synopsys-usb-otg", "synopsys-usb-otg/hs"]
 ## LCD support via FMC/FSMC peripheral. See [display-interface](https://crates.io/crates/display-interface)
 fsmc_lcd = ["dep:display-interface", "dep:display-interface-04"]
 
+## SPI display interface transport. See [display-interface](https://crates.io/crates/display-interface)
+spi_display = ["dep:display-interface", "dep:display-interface-04"]
+
 ## SDIO peripheral support. See [sdio-host](https://crates.io/crates/sdio-host)
 sdio-host = ["dep:sdio-host"]
 
