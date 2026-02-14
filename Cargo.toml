@@ -499,7 +499,7 @@ fsmc_lcd = ["dep:display-interface", "dep:display-interface-04"]
 ## SPI display interface transport. See [display-interface](https://crates.io/crates/display-interface)
 spi_display = ["dep:display-interface", "dep:display-interface-04"]
 
-## LTDC framebuffer abstraction with `DrawTarget` and `Surface` trait. See [embedded-graphics-core](https://crates.io/crates/embedded-graphics-core)
+## LTDC framebuffer abstraction with `DrawTarget`. See [embedded-graphics-core](https://crates.io/crates/embedded-graphics-core)
 framebuffer = ["dep:embedded-graphics-core"]
 
 ## SDIO peripheral support. See [sdio-host](https://crates.io/crates/sdio-host)
