@@ -58,6 +58,7 @@ document-features = "0.2"
 
 micromath = { version = "0.2.0", optional = true }
 stm32-fmc = { version = "0.2.0", features = ["sdram"], optional = true }
+embedded-graphics-core = { version = "0.4", optional = true }
 
 [dependencies.stm32f2]
 version = "0.15.1"
@@ -299,6 +300,9 @@ usb_hs = ["dep:synopsys-usb-otg", "synopsys-usb-otg/hs"]
 ## LCD support via FMC/FSMC peripheral. See [display-interface](https://crates.io/crates/display-interface)
 fsmc_lcd = ["dep:display-interface", "dep:display-interface-04"]
 
+## embedded-graphics DrawTarget support for LTDC framebuffers. See [embedded-graphics](https://crates.io/crates/embedded-graphics)
+embedded-graphics = ["dep:embedded-graphics-core"]
+
 ## SDIO peripheral support. See [sdio-host](https://crates.io/crates/sdio-host)
 sdio-host = ["dep:sdio-host"]
 
@@ -342,7 +346,7 @@ eth = []
 fdcan1 = []
 fdcan2 = []
 fdcan3 = []
-fmc = []
+fmc = ["dep:stm32-fmc"]
 fsmc = []
 fmpi2c1 = []
 gpioc = []
@@ -622,6 +626,10 @@ required-features = ["f4"] # stm32f411
 [[example]]
 name = "st7789-lcd"
 required-features = ["fsmc", "fsmc_lcd"] # stm32f412
+
+[[example]]
+name = "stm32f469i_disco_display"
+required-features = ["stm32f469", "ltdc"]
 
 [[example]]
 name = "stopwatch-with-ssd1306-and-interrupts"
