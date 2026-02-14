@@ -22,7 +22,10 @@ struct BoardConfig {
     mcu: &'static str,
     features: &'static [&'static str],
     chip: &'static str,
+    /// Legacy examples in the top-level examples/ directory
     examples: &'static [&'static str],
+    /// Binary targets in the boards/<name>/ crate
+    board_bins: &'static [&'static str],
 }
 
 const BOARDS: &[BoardConfig] = &[
@@ -32,6 +35,7 @@ const BOARDS: &[BoardConfig] = &[
         features: &["stm32-fmc", "defmt"],
         chip: "STM32F469NIHx",
         examples: &["f469disco-lcd-test", "stm32f469i_disco_screen", "fmc-sdram"],
+        board_bins: &["lcd-framebuffer"],
     },
     BoardConfig {
         name: "f413disco",
@@ -39,6 +43,7 @@ const BOARDS: &[BoardConfig] = &[
         features: &["fsmc_lcd", "defmt"],
         chip: "STM32F413ZHTx",
         examples: &["f413disco-lcd-ferris"],
+        board_bins: &["st7789-fsmc"],
     },
     BoardConfig {
         name: "f429disco",
@@ -46,6 +51,7 @@ const BOARDS: &[BoardConfig] = &[
         features: &["stm32-fmc"],
         chip: "STM32F429ZITx",
         examples: &["ltdc-screen"],
+        board_bins: &["lcd-fsmc"],
     },
 ];
 
@@ -151,8 +157,9 @@ fn check_all() -> bool {
         let features = features_string(board);
         println!("── Checking board: {} (features: {}) ──", board.name, features);
 
+        // Check legacy examples in top-level examples/ directory
         for example in board.examples {
-            print!("  {} ... ", example);
+            print!("  [example] {} ... ", example);
 
             let status = Command::new("cargo")
                 .arg("check")
@@ -176,6 +183,35 @@ fn check_all() -> bool {
                 }
             }
         }
+
+        // Check board-crate binaries in boards/<name>/
+        let board_dir = project_root().join("boards").join(board.name);
+        if board_dir.exists() {
+            for bin in board.board_bins {
+                print!("  [board]   {} ... ", bin);
+
+                let status = Command::new("cargo")
+                    .arg("check")
+                    .arg("--bin")
+                    .arg(bin)
+                    .current_dir(&board_dir)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::piped())
+                    .status();
+
+                match status {
+                    Ok(s) if s.success() => println!("ok"),
+                    Ok(_) => {
+                        println!("FAILED");
+                        all_ok = false;
+                    }
+                    Err(e) => {
+                        println!("ERROR: {}", e);
+                        all_ok = false;
+                    }
+                }
+            }
+        }
     }
 
     all_ok
@@ -187,9 +223,15 @@ fn list_boards() {
         println!("  MCU:      {}", board.mcu);
         println!("  Features: {}", board.features.join(", "));
         println!("  Chip:     {}", board.chip);
-        println!("  Examples:");
+        println!("  Examples (legacy):");
         for ex in board.examples {
             println!("    - {}", ex);
+        }
+        if !board.board_bins.is_empty() {
+            println!("  Board binaries:");
+            for bin in board.board_bins {
+                println!("    - {}", bin);
+            }
         }
         println!();
     }
