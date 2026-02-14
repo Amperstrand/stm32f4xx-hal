@@ -12,6 +12,37 @@
 //! | DSI       | `dsihost`      | `DsiHostCtrlIo` (embedded-display-controller) | OTM8009A, NT35510       |
 //! | SPI       | `spi_display`  | `WriteOnlyDataCommand` (display-interface) | ST7789, ILI9341, SSD1306   |
 //!
+//! ## Framebuffer
+//!
+//! When the `framebuffer` feature is enabled together with `ltdc`, the
+//! [`LtdcFramebuffer`] type provides an [`embedded_graphics_core::draw_target::DrawTarget`]
+//! backed by a memory-mapped pixel buffer (typically SDRAM).
+//!
+//! ## Cross-Board Compatibility
+//!
+//! Use `DrawTarget` from embedded-graphics for portable code:
+//!
+//! ```rust,ignore
+//! use embedded_graphics::prelude::*;
+//! use embedded_graphics::pixelcolor::Rgb565;
+//! use embedded_graphics::primitives::{Circle, PrimitiveStyle};
+//!
+//! fn draw_ui<D>(display: &mut D)
+//! where
+//!     D: DrawTarget<Color = Rgb565>,
+//! {
+//!     Circle::new(Point::new(10, 10), 50)
+//!         .into_styled(PrimitiveStyle::with_fill(Rgb565::RED))
+//!         .draw(display)
+//!         .unwrap();
+//! }
+//! ```
+//!
+//! This works for both:
+//! - **LTDC boards** (F429/F469): Use `LtdcFramebuffer`
+//! - **SPI/FSMC boards** (F411/F413): Use `st7789::ST7789<SpiDisplay>` or
+//!   `st7789::ST7789<FsmcLcd>`
+//!
 //! ## Architecture
 //!
 //! ```text
@@ -52,3 +83,15 @@ pub use crate::dsi::{
     DsiChannel, DsiCmdModeTransmissionKind, DsiConfig, DsiHost, DsiHostCtrlIo, DsiMode,
     DsiPhyTimers, DsiPllConfig, DsiReadCommand, DsiRefreshHandle, DsiWriteCommand,
 };
+
+// --- LTDC framebuffer abstraction ------------------------------------------
+#[cfg(all(feature = "ltdc", feature = "framebuffer"))]
+pub mod framebuffer;
+#[cfg(all(feature = "ltdc", feature = "framebuffer"))]
+pub use framebuffer::LtdcFramebuffer;
+
+// --- SDRAM display framebuffer helpers -------------------------------------
+#[cfg(all(feature = "fmc", feature = "framebuffer"))]
+pub mod sdram;
+#[cfg(all(feature = "fmc", feature = "framebuffer"))]
+pub use sdram::DisplaySdram;
