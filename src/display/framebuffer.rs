@@ -24,7 +24,7 @@
 use embedded_graphics_core::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Size},
-    pixelcolor::{Rgb565, RgbColor},
+    pixelcolor::{IntoStorage, Rgb565},
     primitives::Rectangle,
     Pixel,
 };
@@ -37,6 +37,13 @@ use embedded_graphics_core::{
 ///
 /// The framebuffer is expected to be configured as LTDC layer 1 via
 /// [`DisplayController::config_layer`](crate::ltdc::DisplayController::config_layer).
+///
+/// # Double buffering
+///
+/// This abstraction manages a **single** framebuffer. True double-buffering
+/// (swapping between two SDRAM regions to avoid tearing) is not provided —
+/// the caller is responsible for coordinating LTDC layer base-address swaps
+/// and vertical-blanking synchronisation if tear-free rendering is required.
 pub struct LtdcFramebuffer {
     buffer: &'static mut [u16],
     width: u16,
@@ -91,13 +98,6 @@ impl LtdcFramebuffer {
     }
 }
 
-/// Encode an [`Rgb565`] colour value into a `u16` suitable for the LTDC
-/// RGB565 pixel format.
-#[inline(always)]
-pub(crate) fn rgb565_to_u16(color: Rgb565) -> u16 {
-    (u16::from(color.r()) << 11) | (u16::from(color.g()) << 5) | u16::from(color.b())
-}
-
 impl DrawTarget for LtdcFramebuffer {
     type Color = Rgb565;
     type Error = core::convert::Infallible;
@@ -113,7 +113,7 @@ impl DrawTarget for LtdcFramebuffer {
             let x = coord.x;
             let y = coord.y;
             if x >= 0 && x < w && y >= 0 && y < h {
-                self.buffer[x as usize + self.width as usize * y as usize] = rgb565_to_u16(color);
+                self.buffer[x as usize + self.width as usize * y as usize] = color.into_storage();
             }
         }
 
@@ -121,7 +121,7 @@ impl DrawTarget for LtdcFramebuffer {
     }
 
     fn fill_solid(&mut self, area: &Rectangle, color: Self::Color) -> Result<(), Self::Error> {
-        let value = rgb565_to_u16(color);
+        let value = color.into_storage();
         let w = self.width as i32;
         let h = self.height as i32;
 
@@ -142,7 +142,7 @@ impl DrawTarget for LtdcFramebuffer {
     }
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.buffer.fill(rgb565_to_u16(color));
+        self.buffer.fill(color.into_storage());
         Ok(())
     }
 }
