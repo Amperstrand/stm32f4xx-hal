@@ -12,6 +12,14 @@
 //! | DSI       | `dsihost`      | `DsiHostCtrlIo` (embedded-display-controller) | OTM8009A, NT35510       |
 //! | SPI       | `spi_display`  | `WriteOnlyDataCommand` (display-interface) | ST7789, ILI9341, SSD1306   |
 //!
+//! ## Framebuffer
+//!
+//! When the `framebuffer` feature is enabled together with `ltdc`, the
+//! [`LtdcFramebuffer`] type provides an [`embedded_graphics_core::draw_target::DrawTarget`]
+//! backed by a memory-mapped pixel buffer (typically SDRAM). The [`Surface`]
+//! trait offers a board-portable drawing interface implemented on top of the
+//! framebuffer.
+//!
 //! ## Architecture
 //!
 //! ```text
@@ -52,3 +60,15 @@ pub use crate::dsi::{
     DsiChannel, DsiCmdModeTransmissionKind, DsiConfig, DsiHost, DsiHostCtrlIo, DsiMode,
     DsiPhyTimers, DsiPllConfig, DsiReadCommand, DsiRefreshHandle, DsiWriteCommand,
 };
+
+// --- LTDC framebuffer abstraction ------------------------------------------
+#[cfg(all(feature = "ltdc", feature = "framebuffer"))]
+pub mod framebuffer;
+#[cfg(all(feature = "ltdc", feature = "framebuffer"))]
+pub use framebuffer::LtdcFramebuffer;
+
+// --- Portable drawing surface ----------------------------------------------
+#[cfg(feature = "framebuffer")]
+pub mod surface;
+#[cfg(feature = "framebuffer")]
+pub use surface::Surface;
