@@ -90,6 +90,8 @@ fn main() -> ! {
         .unwrap();
 
     // ── Draw colour bars ────────────────────────────────────────────────
+    // Note: ST7789 implements DrawTarget from embedded-graphics.
+    // This drawing code works identically on LTDC boards using LtdcFramebuffer.
     rprintln!("Drawing colour bars...");
 
     let bar_h = HEIGHT as u32 / 4;

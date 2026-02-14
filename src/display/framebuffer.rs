@@ -41,9 +41,20 @@ use embedded_graphics_core::{
 /// # Double buffering
 ///
 /// This abstraction manages a **single** framebuffer. True double-buffering
-/// (swapping between two SDRAM regions to avoid tearing) is not provided —
-/// the caller is responsible for coordinating LTDC layer base-address swaps
-/// and vertical-blanking synchronisation if tear-free rendering is required.
+/// (swapping between two SDRAM regions to avoid tearing) requires:
+///
+/// 1. Two framebuffer regions in SDRAM
+/// 2. Swapping the LTDC layer base address during vertical blanking
+/// 3. Coordinating writes to the non-displayed buffer
+///
+/// ```rust,ignore
+/// // Allocate two buffers
+/// let fb0 = unsafe { slice::from_raw_parts_mut(sdram_ptr, FB_SIZE) };
+/// let fb1 = unsafe { slice::from_raw_parts_mut(sdram_ptr.add(FB_SIZE), FB_SIZE) };
+///
+/// // Draw into the back buffer, then swap LTDC layer address during VBlank
+/// // LTDC.layer[x].CFBAR = fb0.as_ptr() or fb1.as_ptr()
+/// ```
 pub struct LtdcFramebuffer {
     buffer: &'static mut [u16],
     width: u16,

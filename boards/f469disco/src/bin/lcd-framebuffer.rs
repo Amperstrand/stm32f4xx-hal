@@ -1,8 +1,12 @@
 //! STM32F469I-DISCO LCD framebuffer example
 //!
-//! Demonstrates the `LtdcFramebuffer` + `DrawTarget` + `Surface` abstractions
-//! added by this PR.  Draws colour bars using `embedded-graphics` primitives
+//! Demonstrates the `LtdcFramebuffer` + `DrawTarget` abstraction.
+//! Draws colour bars and rectangles using `embedded-graphics` primitives
 //! on the DSI-connected display.
+//!
+//! The same `DrawTarget`-based drawing code works on both LTDC boards
+//! (F429/F469 with `LtdcFramebuffer`) and SPI/FSMC boards (F413 with
+//! `st7789::ST7789`).
 //!
 //! ## Build
 //!
@@ -25,7 +29,7 @@ use hal::{
         ColorCoding, DsiChannel, DsiCmdModeTransmissionKind, DsiConfig, DsiHost, DsiInterrupts,
         DsiMode, DsiPhyTimers, DsiPllConfig, DsiVideoMode, LaneCount,
     },
-    display::{LtdcFramebuffer, Surface},
+    display::LtdcFramebuffer,
     fmc::FmcExt,
     gpio::alt::fmc as fmc_alt,
     ltdc::{DisplayConfig, DisplayController, Layer, PixelFormat},
@@ -193,12 +197,12 @@ fn main() -> ! {
         .unwrap();
     }
 
-    display_ctrl.reload();
-
-    // ── 8. Also demo the Surface trait ──────────────────────────────────
-    defmt::info!("Demonstrating Surface::fill_rect");
-    framebuffer
-        .fill_rect(100, 300, 280, 200, Rgb565::YELLOW)
+    // ── 8. Draw a rectangle using DrawTarget (embedded-graphics) ────────
+    // DrawTarget is the ecosystem-standard abstraction. The same code works
+    // on both LTDC boards (LtdcFramebuffer) and SPI/FSMC boards (st7789).
+    Rectangle::new(Point::new(100, 300), Size::new(280, 200))
+        .into_styled(PrimitiveStyle::with_fill(Rgb565::YELLOW))
+        .draw(&mut framebuffer)
         .unwrap();
     display_ctrl.reload();
 

@@ -16,9 +16,32 @@
 //!
 //! When the `framebuffer` feature is enabled together with `ltdc`, the
 //! [`LtdcFramebuffer`] type provides an [`embedded_graphics_core::draw_target::DrawTarget`]
-//! backed by a memory-mapped pixel buffer (typically SDRAM). The [`Surface`]
-//! trait offers a board-portable drawing interface implemented on top of the
-//! framebuffer.
+//! backed by a memory-mapped pixel buffer (typically SDRAM).
+//!
+//! ## Cross-Board Compatibility
+//!
+//! Use `DrawTarget` from embedded-graphics for portable code:
+//!
+//! ```rust,ignore
+//! use embedded_graphics::prelude::*;
+//! use embedded_graphics::pixelcolor::Rgb565;
+//! use embedded_graphics::primitives::{Circle, PrimitiveStyle};
+//!
+//! fn draw_ui<D>(display: &mut D)
+//! where
+//!     D: DrawTarget<Color = Rgb565>,
+//! {
+//!     Circle::new(Point::new(10, 10), 50)
+//!         .into_styled(PrimitiveStyle::with_fill(Rgb565::RED))
+//!         .draw(display)
+//!         .unwrap();
+//! }
+//! ```
+//!
+//! This works for both:
+//! - **LTDC boards** (F429/F469): Use `LtdcFramebuffer`
+//! - **SPI/FSMC boards** (F411/F413): Use `st7789::ST7789<SpiDisplay>` or
+//!   `st7789::ST7789<FsmcLcd>`
 //!
 //! ## Architecture
 //!
@@ -72,9 +95,3 @@ pub use framebuffer::LtdcFramebuffer;
 pub mod sdram;
 #[cfg(all(feature = "fmc", feature = "framebuffer"))]
 pub use sdram::DisplaySdram;
-
-// --- Portable drawing surface ----------------------------------------------
-#[cfg(feature = "framebuffer")]
-pub mod surface;
-#[cfg(feature = "framebuffer")]
-pub use surface::Surface;
