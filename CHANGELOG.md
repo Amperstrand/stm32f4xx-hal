@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
  - Improve STM32F469I-DISCO LCD controller detection (NT35510/OTM8009A), including NT35510 RDID1 validation and probe retries [#842] [#843]
- - Add compile-time controller selection features (`nt35510-only`, `otm8009a-only`) and improve f469 LCD test touch error handling/logging
+ - Use runtime autodetection for LCD controller and improve f469 LCD test touch error handling/logging
 
 ## [v0.23.0] - 2025-09-22
 
