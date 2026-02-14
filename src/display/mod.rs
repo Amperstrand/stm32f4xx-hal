@@ -67,6 +67,12 @@ pub mod framebuffer;
 #[cfg(all(feature = "ltdc", feature = "framebuffer"))]
 pub use framebuffer::LtdcFramebuffer;
 
+// --- SDRAM display framebuffer helpers -------------------------------------
+#[cfg(all(feature = "fmc", feature = "framebuffer"))]
+pub mod sdram;
+#[cfg(all(feature = "fmc", feature = "framebuffer"))]
+pub use sdram::DisplaySdram;
+
 // --- Portable drawing surface ----------------------------------------------
 #[cfg(feature = "framebuffer")]
 pub mod surface;
