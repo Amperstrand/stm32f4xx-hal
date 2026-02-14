@@ -19,10 +19,10 @@ pub trait Surface {
     /// Returns `(width, height)` in pixels.
     fn size(&self) -> (u16, u16);
 
-    /// Fill the entire surface with a single colour value.
+    /// Fill the entire surface with a single color value.
     fn clear(&mut self, color: u32) -> Result<(), Self::Error>;
 
-    /// Fill a rectangular area with a single colour value.
+    /// Fill a rectangular area with a single color value.
     fn fill_rect(&mut self, x: u16, y: u16, w: u16, h: u16, color: u32)
         -> Result<(), Self::Error>;
 

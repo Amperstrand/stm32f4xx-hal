@@ -1,7 +1,7 @@
 //! STM32F469I-DISCO display demonstration
 //!
 //! This example initialises the FMC → SDRAM, configures the LTDC controller,
-//! creates an [`LtdcFramebuffer`] in SDRAM and draws a simple colour-bar test
+//! creates an [`LtdcFramebuffer`] in SDRAM and draws a simple color-bar test
 //! pattern using the [`Surface`] trait as well as (optionally)
 //! `embedded-graphics`.
 //!
@@ -103,7 +103,7 @@ fn main() -> ! {
     // --- Draw a test pattern using the Surface trait ------------------------
     Surface::clear(&mut fb, 0x0000).unwrap(); // black
 
-    // Five colour bars (red, green, blue, yellow, cyan) using fill_rect
+    // Five color bars (red, green, blue, yellow, cyan) using fill_rect
     let bar_h = HEIGHT / 5;
     let colors: [u32; 5] = [
         0xF800, // red   (RGB565)

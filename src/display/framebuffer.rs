@@ -64,14 +64,14 @@ impl<T: 'static + SupportedWord> LtdcFramebuffer<T> {
 }
 
 impl LtdcFramebuffer<u16> {
-    /// Fill the entire framebuffer with a single RGB565 colour.
+    /// Fill the entire framebuffer with a single RGB565 color.
     pub fn clear_color(&mut self, color: u16) {
         for pixel in self.buffer.iter_mut() {
             *pixel = color;
         }
     }
 
-    /// Fill a rectangular region with a single RGB565 colour.
+    /// Fill a rectangular region with a single RGB565 color.
     ///
     /// Coordinates are clamped to the framebuffer bounds.
     pub fn fill_rect(&mut self, x: u16, y: u16, w: u16, h: u16, color: u16) {
