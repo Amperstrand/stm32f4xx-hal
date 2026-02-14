@@ -1,4 +1,5 @@
 /target/
+/xtask/target/
 **/*.orig
 **/*.rs.bk
 Cargo.lock
