@@ -32,7 +32,7 @@ const BOARDS: &[BoardConfig] = &[
     BoardConfig {
         name: "f469disco",
         mcu: "stm32f469",
-        features: &["stm32-fmc", "defmt"],
+        features: &["stm32-fmc", "defmt", "framebuffer"],
         chip: "STM32F469NIHx",
         examples: &["f469disco-lcd-test", "stm32f469i_disco_screen", "fmc-sdram"],
         board_bins: &["lcd-framebuffer"],
