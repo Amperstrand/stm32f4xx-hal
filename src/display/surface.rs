@@ -92,7 +92,7 @@ impl Surface for super::framebuffer::LtdcFramebuffer {
     }
 
     fn write_pixels(&mut self, x: u16, y: u16, pixels: &[Rgb565]) -> Result<(), Self::Error> {
-        use embedded_graphics_core::pixelcolor::RgbColor;
+        use super::framebuffer::rgb565_to_u16;
 
         let w = self.width() as usize;
         let h = self.height() as usize;
@@ -104,9 +104,7 @@ impl Surface for super::framebuffer::LtdcFramebuffer {
                 break;
             }
             if px < w {
-                let value =
-                    (u16::from(color.r()) << 11) | (u16::from(color.g()) << 5) | u16::from(color.b());
-                self.as_mut_slice()[px + w * py] = value;
+                self.as_mut_slice()[px + w * py] = rgb565_to_u16(color);
             }
             px += 1;
             if px >= w {

@@ -94,7 +94,7 @@ impl LtdcFramebuffer {
 /// Encode an [`Rgb565`] colour value into a `u16` suitable for the LTDC
 /// RGB565 pixel format.
 #[inline(always)]
-fn rgb565_to_u16(color: Rgb565) -> u16 {
+pub(crate) fn rgb565_to_u16(color: Rgb565) -> u16 {
     (u16::from(color.r()) << 11) | (u16::from(color.g()) << 5) | u16::from(color.b())
 }
 

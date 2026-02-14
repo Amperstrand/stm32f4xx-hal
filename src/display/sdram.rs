@@ -11,8 +11,9 @@
 //! use stm32f4xx_hal::display::sdram::DisplaySdram;
 //!
 //! // `sdram_ptr` obtained from `Sdram::init()`
-//! let fb = unsafe { DisplaySdram::from_raw(sdram_ptr, 480, 800) };
-//! let buf: &'static mut [u16] = fb.as_rgb565_buffer();
+//! let mut fb = unsafe { DisplaySdram::from_raw(sdram_ptr, 480, 800) };
+//! unsafe { fb.clear() };
+//! let buf: &'static mut [u16] = unsafe { fb.into_rgb565_buffer() };
 //! ```
 
 use core::slice;
@@ -75,12 +76,15 @@ impl DisplaySdram {
     /// Return the framebuffer as a `&'static mut [u16]` slice sized to
     /// `width × height` pixels in Rgb565 format.
     ///
+    /// This method **consumes** `self` to prevent creating multiple mutable
+    /// references to the same SDRAM region.
+    ///
     /// # Safety
     ///
     /// This creates a `'static` mutable reference to the SDRAM region.
     /// The caller must guarantee that no other reference to the same
     /// memory exists for the `'static` lifetime.
-    pub unsafe fn as_rgb565_buffer(&mut self) -> &'static mut [u16] {
+    pub unsafe fn into_rgb565_buffer(self) -> &'static mut [u16] {
         let len = self.width as usize * self.height as usize;
         slice::from_raw_parts_mut(self.ptr, len)
     }
@@ -90,6 +94,8 @@ impl DisplaySdram {
     /// # Safety
     ///
     /// The SDRAM region must be initialised and exclusively accessible.
+    /// This must not be called after [`Self::into_rgb565_buffer`] has been
+    /// used to create a mutable reference to the same memory.
     pub unsafe fn clear(&mut self) {
         let len = self.width as usize * self.height as usize;
         let buf = slice::from_raw_parts_mut(self.ptr, len);
