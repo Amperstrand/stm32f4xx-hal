@@ -17,6 +17,7 @@ target = "thumbv7em-none-eabihf"
 DEFMT_LOG = "info"
 
 [alias]
-# Note: run xtask from its directory to pick up the host-target override
-# in xtask/.cargo/config.toml.  E.g.:  cd xtask && cargo run -- check-all
+# Run the xtask build orchestration tool.
+# Uses --target to override the embedded default target for the host-side tool.
+# On non-Linux hosts, run directly: cd xtask && cargo run -- <args>
 xtask = "run --manifest-path xtask/Cargo.toml --target x86_64-unknown-linux-gnu --"

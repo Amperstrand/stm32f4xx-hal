@@ -5,7 +5,7 @@
 //! ## Build
 //!
 //! ```bash
-//! cargo build --release -p f429disco-examples --bin lcd-fsmc
+//! cargo build --release -p f429disco-examples --bin ltdc-framebuffer
 //! ```
 
 #![deny(warnings)]

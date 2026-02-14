@@ -51,7 +51,7 @@ const BOARDS: &[BoardConfig] = &[
         features: &["stm32-fmc"],
         chip: "STM32F429ZITx",
         examples: &["ltdc-screen"],
-        board_bins: &["lcd-fsmc"],
+        board_bins: &["ltdc-framebuffer"],
     },
 ];
 
