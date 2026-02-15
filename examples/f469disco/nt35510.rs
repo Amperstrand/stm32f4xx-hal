@@ -39,6 +39,10 @@ impl Nt35510 {
 
     /// Probes for the NT35510 LCD controller by reading the RDID1 register (0xDA).
     ///
+    /// Note: ST's standalone NT35510 driver identifies the panel via RDID2 (0xDB = 0x80),
+    /// but on STM32F469I-DISCO B08 boards in this repository RDID1 (0xDA = 0x00) has been
+    /// the most reliable discriminator against OTM8009A (0x40).
+    ///
     /// # Detection Logic
     ///
     /// | Controller | Board Rev | RDID1 Value |

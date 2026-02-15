@@ -33,6 +33,15 @@
 //! - STM32F469I-DISCO B08 (NT35510)
 //! - STM32F469I-DISCO B07 (OTM8009A)
 //!
+//! ### Notes from controller research
+//!
+//! - ST's standalone OTM8009A driver reads ID1 (`0xDA`) and expects `0x40`:
+//!   <https://github.com/STMicroelectronics/stm32-otm8009a>
+//! - ST's standalone NT35510 driver reads ID2 (`0xDB`) and expects `0x80`:
+//!   <https://github.com/STMicroelectronics/stm32-nt35510>
+//! - This example intentionally probes NT35510 using RDID1 (`0xDA == 0x00`) because it
+//!   has proven reliable on F469I-DISCO B08 boards in this repository.
+//!
 //! Run as:
 //! cargo run --release --example f469disco-lcd-test --features="stm32f469,defmt"
 
