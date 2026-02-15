@@ -103,13 +103,17 @@ impl Nt35510 {
         self.write_reg(dsi_host, 0xCC, &[0x03, 0x00, 0x00])?;
         self.write_reg(dsi_host, 0xBA, &[0x01])?;
 
+        // Datasheet-derived sequencing:
+        // - allow internal power stabilization before pixel format setup
+        // - >=120ms after SLPOUT (0x11)
+        // - >=20ms after DISPON (0x29)
         delay.delay_us(200_000);
         self.write_cmd(dsi_host, CMD_COLMOD, COLMOD_RGB888)?;
         delay.delay_us(10_000);
         self.write_cmd(dsi_host, CMD_SLPOUT, 0x00)?;
         delay.delay_us(120_000);
         self.write_cmd(dsi_host, CMD_DISPON, 0x00)?;
-        delay.delay_us(10_000);
+        delay.delay_us(20_000);
 
         self.initialized = true;
         Ok(())

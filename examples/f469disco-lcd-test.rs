@@ -3,6 +3,7 @@
 //! This example supports both STM32F469I-DISCO board revisions:
 //! - B08 revision (NT35510 LCD controller) - auto-detected and preferred
 //! - B07 and earlier (OTM8009A LCD controller) - fallback
+//!   (see STM32F469I-DISCO user manual UM1932 for revision split)
 //!
 //! ## Display Controller Detection
 //!
@@ -101,16 +102,18 @@ impl LcdController {
 pub const WIDTH: usize = 480;
 pub const HEIGHT: usize = 800;
 
-// NT35510 timing (B08 revision)
+// NT35510 timing (B08 / Rev C):
+// - Vertical values follow ST's BSP + specter-diy validated hardware settings
+//   for NT35510 panels (VSYNC=120, VBP=150, VFP=150).
 pub const NT35510_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
     active_width: WIDTH as _,
     active_height: HEIGHT as _,
     h_back_porch: 34,
     h_front_porch: 34,
-    v_back_porch: 15,
-    v_front_porch: 16,
+    v_back_porch: 150,
+    v_front_porch: 150,
     h_sync: 2,
-    v_sync: 1,
+    v_sync: 120,
     frame_rate: 60,
     h_sync_pol: true,
     v_sync_pol: true,
@@ -142,8 +145,10 @@ pub const OTM8009A_DISPLAY_CONFIG: DisplayConfig = DisplayConfig {
 // work with both display types for reading the RDID1 register.
 const DSI_PROBE_DISPLAY_CONFIG: DisplayConfig = NT35510_DISPLAY_CONFIG;
 
-// DSI LP sizes: NT35510 requires larger LP packets (64).
-// These values also work with OTM8009A during probe and operation.
+// DSI LP sizes:
+// - NT35510 needs larger LP packet sizes (64)
+// - OTM8009A may prefer 4 in single-controller builds; 64 is used here so one
+//   runtime-detecting binary can operate on B08+ and B07 boards.
 const DSI_LP_SIZE: u8 = 64;
 const DSI_VLP_SIZE: u8 = 64;
 
@@ -160,7 +165,9 @@ fn main() -> ! {
 
     let gpioh = dp.GPIOH.split(&mut rcc);
 
-    // Reset display
+    // Reset display (PH7/XRES) in push-pull mode.
+    // This is required by NT35510-based B08 boards and remains compatible with
+    // OTM8009A boards in our testing.
     let mut lcd_reset = gpioh.ph7.into_push_pull_output();
     lcd_reset.set_low();
     delay.delay_ms(20u32);
