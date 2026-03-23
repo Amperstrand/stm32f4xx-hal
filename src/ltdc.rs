@@ -764,10 +764,10 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
     pub fn wait_for_reload(&self, timeout_cycles: u32) -> bool {
         let mut remaining = timeout_cycles;
         while self._ltdc.srcr().read().vbr().bit_is_set() {
-            if remaining == 0 {
-                return false;
-            }
-            remaining -= 1;
+            remaining = match remaining.checked_sub(1) {
+                Some(r) => r,
+                None => return false,
+            };
             cortex_m::asm::nop();
         }
         true
