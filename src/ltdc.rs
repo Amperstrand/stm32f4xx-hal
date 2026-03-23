@@ -685,6 +685,93 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
     pub fn reload_on_vblank(&self) {
         self._ltdc.srcr().modify(|_, w| w.vbr().set_bit());
     }
+
+    /// Swap the framebuffer for a layer with proper synchronization.
+    ///
+    /// This method waits for any previous VBlank reload to complete before
+    /// writing the new buffer address and triggering a new reload, preventing
+    /// the race condition where back-to-back VBR writes can leave the LTDC
+    /// in an inconsistent state (which may interfere with USB DMA transfers).
+    ///
+    /// # Arguments
+    /// * `layer` – The layer to update ([`Layer::L1`] or [`Layer::L2`])
+    /// * `address` – New framebuffer base address (must be accessible by LTDC, e.g. SDRAM)
+    ///
+    /// # Returns
+    /// * `Ok(())` – the new address was written and VBlank reload triggered
+    /// * `Err(SwapError::TimeoutPendingReload)` – a previous reload did not
+    ///   complete within the timeout (~2 000 000 iterations ≈ two frame periods
+    ///   at typical clock speeds)
+    ///
+    /// # Timing
+    /// At 60 Hz refresh the VBlank period is ≈ 16.7 ms.  In the worst case this
+    /// method blocks for up to two frame periods (~33 ms) while waiting for the
+    /// previous reload to finish.
+    pub fn swap_buffers(&self, layer: Layer, address: u32) -> Result<(), SwapError> {
+        // Wait for any pending VBlank reload to complete.
+        // VBR is self-clearing after the reload, so poll until it reads 0.
+        let mut timeout = 2_000_000u32;
+        while self._ltdc.srcr().read().vbr().bit_is_set() {
+            timeout = timeout.checked_sub(1).ok_or(SwapError::TimeoutPendingReload)?;
+            cortex_m::asm::nop();
+        }
+
+        // Write the new buffer address into the shadow register.
+        self._ltdc
+            .layer(layer as usize)
+            .cfbar()
+            .write(|w| w.cfbadd().set(address));
+
+        // Trigger reload on the next VBlank.
+        self._ltdc.srcr().modify(|_, w| w.vbr().set_bit());
+
+        Ok(())
+    }
+
+    /// Swap the framebuffer immediately (may cause tearing).
+    ///
+    /// Unlike [`swap_buffers()`](Self::swap_buffers), this method uses an
+    /// *immediate* reload (SRCR.IMR) and waits for it to complete before
+    /// returning.  This avoids the VBlank timing dependency but may produce
+    /// visible tearing if the display is actively scanning.
+    ///
+    /// Use this when latency matters more than visual quality, or when you
+    /// know the display is not in the active scanning period.
+    pub fn swap_buffers_immediate(&self, layer: Layer, address: u32) {
+        self._ltdc
+            .layer(layer as usize)
+            .cfbar()
+            .write(|w| w.cfbadd().set(address));
+        self._ltdc.srcr().modify(|_, w| w.imr().set_bit());
+
+        // IMR is self-clearing once the reload completes.
+        while self._ltdc.srcr().read().imr().bit_is_set() {}
+    }
+
+    /// Check whether a VBlank reload is currently pending.
+    ///
+    /// Returns `true` while the LTDC is waiting for the next vertical blanking
+    /// period to apply a previously requested shadow-register reload.
+    pub fn is_reload_pending(&self) -> bool {
+        self._ltdc.srcr().read().vbr().bit_is_set()
+    }
+
+    /// Wait for any pending VBlank reload to complete, with a caller-supplied
+    /// iteration-count timeout.
+    ///
+    /// Returns `true` if the reload completed (or none was pending), `false` if
+    /// the timeout was reached while VBR was still set.
+    pub fn wait_for_reload(&self, timeout_cycles: u32) -> bool {
+        let mut remaining = timeout_cycles;
+        while self._ltdc.srcr().read().vbr().bit_is_set() {
+            if remaining == 0 {
+                return false;
+            }
+            remaining -= 1;
+            cortex_m::asm::nop();
+        }
+        true
+    }
 }
 
 /// A framebuffer wrapper that implements [`DrawTarget`] for use with
@@ -753,6 +840,13 @@ impl<T: 'static + SupportedWord> OriginDimensions for LtdcFramebuffer<T> {
     fn size(&self) -> Size {
         Size::new(self.width as u32, self.height as u32)
     }
+}
+
+/// Errors that can occur during a buffer swap operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwapError {
+    /// A previous VBlank reload did not complete within the timeout period.
+    TimeoutPendingReload,
 }
 
 /// Available PixelFormats to work with
