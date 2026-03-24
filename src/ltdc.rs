@@ -685,6 +685,51 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
     pub fn reload_on_vblank(&self) {
         self._ltdc.srcr().modify(|_, w| w.vbr().set_bit());
     }
+
+    pub fn swap_buffers(&self, layer: Layer, address: u32) -> Result<(), SwapError> {
+        let mut timeout = 2_000_000u32;
+        while self._ltdc.srcr().read().vbr().bit_is_set() {
+            timeout = timeout
+                .checked_sub(1)
+                .ok_or(SwapError::TimeoutPendingReload)?;
+            cortex_m::asm::nop();
+        }
+
+        self._ltdc
+            .layer(layer as usize)
+            .cfbar()
+            .write(|w| w.cfbadd().set(address));
+
+        self._ltdc.srcr().modify(|_, w| w.vbr().set_bit());
+
+        Ok(())
+    }
+
+    pub fn swap_buffers_immediate(&self, layer: Layer, address: u32) {
+        self._ltdc
+            .layer(layer as usize)
+            .cfbar()
+            .write(|w| w.cfbadd().set(address));
+        self._ltdc.srcr().modify(|_, w| w.imr().set_bit());
+
+        while self._ltdc.srcr().read().imr().bit_is_set() {}
+    }
+
+    pub fn is_reload_pending(&self) -> bool {
+        self._ltdc.srcr().read().vbr().bit_is_set()
+    }
+
+    pub fn wait_for_reload(&self, timeout_cycles: u32) -> bool {
+        let mut remaining = timeout_cycles;
+        while self._ltdc.srcr().read().vbr().bit_is_set() {
+            remaining = match remaining.checked_sub(1) {
+                Some(r) => r,
+                None => return false,
+            };
+            cortex_m::asm::nop();
+        }
+        true
+    }
 }
 
 /// A framebuffer wrapper that implements [`DrawTarget`] for use with
@@ -753,6 +798,12 @@ impl<T: 'static + SupportedWord> OriginDimensions for LtdcFramebuffer<T> {
     fn size(&self) -> Size {
         Size::new(self.width as u32, self.height as u32)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum SwapError {
+    TimeoutPendingReload,
 }
 
 /// Available PixelFormats to work with
