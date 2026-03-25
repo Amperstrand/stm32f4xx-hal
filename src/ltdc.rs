@@ -362,15 +362,24 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
 
     /// Create a DisplayController for DSI-driven displays.
     ///
-    /// Unlike [`new()`](Self::new), this constructor does not configure LTDC pins
-    /// or PLLSAI. On DSI boards the DSI host drives the pixel clock and data
-    /// lines, so LTDC only needs its timing registers set up.
+    /// Unlike [`new()`](Self::new), this constructor does not configure LTDC pins.
+    /// PLLSAI/R is configured from `hse_freq` to generate the LTDC pixel clock,
+    /// which on STM32F469 is always sourced from `PLLSAI_R / PLLSAIDIVR` — there
+    /// is no mux to select the DSI clock directly.
     pub fn new_dsi(
         ltdc: LTDC,
         dma2d: DMA2D,
         pixel_format: PixelFormat,
         config: DisplayConfig,
+        hse_freq: Hertz,
     ) -> DisplayController<T> {
+        let total_width: u16 =
+            config.h_sync + config.h_back_porch + config.active_width + config.h_front_porch - 1;
+        let total_height: u16 =
+            config.v_sync + config.v_back_porch + config.active_height + config.v_front_porch - 1;
+        let lcd_clk: u32 =
+            (total_width as u32) * (total_height as u32) * (config.frame_rate as u32);
+
         unsafe {
             LTDC::enable_unchecked();
             LTDC::reset_unchecked();
@@ -378,10 +387,54 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
             DMA2D::reset_unchecked();
         }
 
-        let total_width: u16 =
-            config.h_sync + config.h_back_porch + config.active_width + config.h_front_porch - 1;
-        let total_height: u16 =
-            config.v_sync + config.v_back_porch + config.active_height + config.v_front_porch - 1;
+        let rcc = unsafe { &(*RCC::ptr()) };
+        let pllm: u8 = rcc.pllcfgr().read().pllm().bits();
+
+        let vco_in_mhz: f32 = (hse_freq.raw() as f32 / pllm as f32) / 1_000_000.0;
+        let lcd_clk_mhz = (lcd_clk as f32) / 1_000_000.0;
+        let allowed_pllr = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let allowed_divr = [2.0, 4.0, 8.0, 16.0];
+        let mut best_pllr: f32 = allowed_pllr[0];
+        let mut best_divr: f32 = allowed_divr[0];
+        let mut best_plln: f32 = 100.0;
+        let mut best_error: f32 = (vco_in_mhz * best_plln) / (best_pllr * best_divr);
+        let mut error: f32;
+        let mut plln: f32;
+
+        for pllr in &allowed_pllr {
+            for divr in &allowed_divr {
+                plln = ((lcd_clk_mhz * divr * pllr) / vco_in_mhz).floor();
+                error = lcd_clk_mhz - (vco_in_mhz * plln) / (pllr * divr);
+
+                if 100.0 <= vco_in_mhz * plln
+                    && vco_in_mhz * plln <= 432.0
+                    && error >= 0.0
+                    && error < best_error
+                {
+                    best_pllr = *pllr;
+                    best_divr = *divr;
+                    best_plln = plln;
+                    best_error = error;
+                }
+            }
+        }
+
+        let pllsaidivr: u8 = match best_divr as u16 {
+            2 => 0b00,
+            4 => 0b01,
+            8 => 0b10,
+            16 => 0b11,
+            _ => unreachable!(),
+        };
+
+        rcc.pllsaicfgr().write(|w| unsafe {
+            w.pllsain().bits(best_plln as u16);
+            w.pllsair().bits(best_pllr as u8)
+        });
+        rcc.dckcfgr().modify(|_, w| w.pllsaidivr().set(pllsaidivr));
+
+        rcc.cr().modify(|_, w| w.pllsaion().on());
+        while rcc.cr().read().pllsairdy().is_not_ready() {}
 
         ltdc.sscr().write(|w| {
             w.hsw().set(config.h_sync - 1);
