@@ -590,6 +590,11 @@ impl DsiHost {
         self.start_wrapper();
     }
 
+    pub fn stop(&mut self) {
+        self.dsi.cr().modify(|_, w| w.en().clear_bit());
+        self.dsi.wcr().modify(|_, w| w.dsien().clear_bit());
+    }
+
     pub fn refresh(&mut self) {
         self.dsi.wcr().modify(|_, w| w.ltdcen().set_bit());
     }
