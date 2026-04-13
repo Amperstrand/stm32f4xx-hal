@@ -336,8 +336,11 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
             w.pcpol().bit(config.pixel_clock_pol)
         });
 
-        // Set blue background color
-        ltdc.bccr().write(|w| unsafe { w.bits(0xAAAAAAAA) });
+        ltdc.bccr().write(|w| unsafe {
+            w.bcred().bits(0);
+            w.bcgreen().bits(0);
+            w.bcblue().bits(0)
+        });
 
         // TODO: configure interupts
 
