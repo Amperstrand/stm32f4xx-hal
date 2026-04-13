@@ -300,7 +300,7 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
         };
 
         // // Write PPLSAI configuration
-        rcc.pllsaicfgr().write(|w| unsafe {
+        rcc.pllsaicfgr().modify(|_, w| unsafe {
             w.pllsain().bits(best_plln as u16);
             w.pllsair().bits(best_pllr as u8)
         });
@@ -431,7 +431,7 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
             _ => unreachable!(),
         };
 
-        rcc.pllsaicfgr().write(|w| unsafe {
+        rcc.pllsaicfgr().modify(|_, w| unsafe {
             w.pllsain().bits(best_plln as u16);
             w.pllsair().bits(best_pllr as u8)
         });
