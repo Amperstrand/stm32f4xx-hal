@@ -163,8 +163,13 @@ impl DsiHost {
     ) -> Result<DsiHost, Error> {
         DSI::enable(rcc);
 
-        // Bring DSI peripheral out of reset
-        dsi.cr().modify(|_, w| w.en().set_bit());
+        // NOTE: CR.EN is NOT set here. RM0386 requires the DSI host to be
+        // disabled during configuration. The DesignWare DSI host calculates
+        // HFP dynamically from HLINE - HSA - HBP - HACT_bytes, where
+        // HACT_bytes depends on COLMUX (color coding). If CR.EN is set before
+        // COLMUX is written, the host may use the reset-default color coding
+        // (RGB565) to derive timing, causing column shift with RGB888.
+        // CR.EN is set in DsiHost::start(), called after all configuration.
 
         //RCC_D1CCIPR: DSI clock from PHY is selected as DSI byte lane clock (default after reset)
         let cycles_1ms = rcc.clocks.sysclk().raw() / 1_000;
@@ -218,9 +223,12 @@ impl DsiHost {
             }, // Automatically stop lanes clock when "time allows"
         );
 
-        // Configure the number of active data lanes
+        // Configure the number of active data lanes and stop wait time
         dsi.pconfr()
             .modify(|_, w| unsafe { w.nl().bits(dsi_config.lane_count as u8) }); // 0b00 - 1 lanes, 0b01 - 2 lanes
+
+        dsi.pcr().modify(|_, w| w.btae().set_bit());
+        dsi.pconfr().modify(|_, w| unsafe { w.sw_time().bits(10) });
 
         // Set TX escape clock division factor
         dsi.ccr()
@@ -305,20 +313,36 @@ impl DsiHost {
                 });
 
                 // Packet size, 14 bits max
-                // TODO: Might be incorrect for 16 or 18bit
                 dsi.vpcr()
                     .modify(|_, w| unsafe { w.vpsize().bits(display_config.active_width) });
 
-                // TODO: Unhardcode?
-                // This register configures the number of chunks to be transmitted during a line period (a chunk
-                // consists of a video packet and a null packet).
-                // If set to 0 or 1, the video line is transmitted in a single packet.
-                // If set to 1, the packet is part of a chunk, so a null packet follows it if NPSIZE > 0. Otherwise,
-                // multiple chunks are used to transmit each video line.
-                dsi.vccr().modify(|_, w| unsafe { w.numc().bits(1) });
+                // Single packet per line (0 = video line in one packet)
+                dsi.vccr().modify(|_, w| unsafe { w.numc().bits(0) });
 
-                // Size of the null packet
-                dsi.vnpcr().modify(|_, w| unsafe { w.npsize().bits(0) });
+                // Null packet size (0xFFF = max, pads remaining line time in burst mode)
+                dsi.vnpcr()
+                    .modify(|_, w| unsafe { w.npsize().bits(0x0FFF) });
+
+                // Color coding, polarity, and virtual channel — must be set
+                // before timing registers because the DW DSI host derives
+                // HFP dynamically from HLINE using the current COLMUX value.
+                let lpe = matches!(
+                    dsi_config.color_coding_host,
+                    ColorCoding::EighteenBitsConfig1 | ColorCoding::EighteenBitsConfig2
+                );
+                dsi.lcolcr().modify(|_, w| unsafe {
+                    w.lpe()
+                        .bit(lpe) // loosely packed: 18bits
+                        .colc()
+                        .bits(dsi_config.color_coding_host as u8)
+                });
+                dsi.wcfgr().modify(|_, w| unsafe {
+                    w.colmux().bits(dsi_config.color_coding_wrapper as u8)
+                });
+                dsi.lpcr()
+                    .modify(|_, w| w.dep().clear_bit().vsp().clear_bit().hsp().clear_bit());
+                dsi.lvcidr()
+                    .modify(|_, w| unsafe { w.vcid().bits(dsi_config.channel as u8) });
 
                 // Horizontal sync active (HSA) in lane byte clock cycles
                 let f_ltdc_khz = dsi_config.ltdc_freq.to_kHz();
@@ -335,7 +359,6 @@ impl DsiHost {
                     + display_config.active_width
                     + display_config.h_front_porch;
                 let hline = ((hline as u32) * f_pix_khz / f_ltdc_khz) as u16;
-                // let hsync = f_phy * 3 * hline as u32 / 8;
                 dsi.vlcr().modify(|_, w| unsafe { w.hline().bits(hline) });
 
                 // Vertical sync active (VSA)
@@ -386,32 +409,26 @@ impl DsiHost {
 
                 // Tearing effect acknowledge request
                 dsi.cmcr().modify(|_, w| w.teare().set_bit());
+
+                let lpe = matches!(
+                    dsi_config.color_coding_host,
+                    ColorCoding::EighteenBitsConfig1 | ColorCoding::EighteenBitsConfig2
+                );
+                dsi.lcolcr().modify(|_, w| unsafe {
+                    w.lpe()
+                        .bit(lpe)
+                        .colc()
+                        .bits(dsi_config.color_coding_host as u8)
+                });
+                dsi.wcfgr().modify(|_, w| unsafe {
+                    w.colmux().bits(dsi_config.color_coding_wrapper as u8)
+                });
+                dsi.lpcr()
+                    .modify(|_, w| w.dep().clear_bit().vsp().clear_bit().hsp().clear_bit());
+                dsi.lvcidr()
+                    .modify(|_, w| unsafe { w.vcid().bits(dsi_config.channel as u8) });
             }
         }
-
-        // Select virtual channel for the LTDC interface traffic
-        dsi.lvcidr()
-            .modify(|_, w| unsafe { w.vcid().bits(dsi_config.channel as u8) });
-
-        // Polarity
-        dsi.lpcr()
-            .modify(|_, w| w.dep().clear_bit().vsp().clear_bit().hsp().clear_bit());
-
-        // Color coding for the host
-        let lpe = matches!(
-            dsi_config.color_coding_host,
-            ColorCoding::EighteenBitsConfig1 | ColorCoding::EighteenBitsConfig2
-        );
-        dsi.lcolcr().modify(|_, w| unsafe {
-            w.lpe()
-                .bit(lpe) // loosely packed: 18bits
-                .colc()
-                .bits(dsi_config.color_coding_host as u8) // 0: 16bit_1, 1: 16bit_2, 2: 16bit_3, 3: 18bit_1, 4: 18bit_2, 5: 24bit
-        });
-
-        // Color coding for the wrapper
-        dsi.wcfgr()
-            .modify(|_, w| unsafe { w.colmux().bits(dsi_config.color_coding_wrapper as u8) });
 
         dsi.lpmcr().modify(|_, w| unsafe {
             w.lpsize()
@@ -536,9 +553,41 @@ impl DsiHost {
         });
     }
 
-    pub fn start(&mut self) {
+    /// Enable the DSI host only (CR.EN).
+    ///
+    /// Use this for command-mode operations like panel detection, where the
+    /// DSI wrapper (LTDC↔DSI data path) is not needed.
+    ///
+    /// The DSI wrapper must be enabled separately via [`start_wrapper()`]
+    /// **after** the LTDC is configured and running. ST's BSP explicitly
+    /// documents this ordering requirement:
+    ///
+    /// > "To avoid any synchronization issue, the DSI shall be started
+    /// > after enabling the LTDC."
+    /// > — STM32CubeF4 BSP, `stm32469i_discovery_lcd.c` line 373-374
+    ///
+    /// Ref: STMicroelectronics/32f469idiscovery-bsp `BSP_LCD_InitEx()`
+    pub fn start_host(&mut self) {
         self.dsi.cr().modify(|_, w| w.en().set_bit());
+    }
+
+    /// Enable the DSI wrapper (WCR.DSIEN).
+    ///
+    /// This activates the LTDC↔DSI data path for video mode. Must be
+    /// called **after** `start_host()` and **after** the LTDC is running.
+    ///
+    /// Ref: STMicroelectronics/stm32f4xx_hal_driver `HAL_DSI_Start()`
+    pub fn start_wrapper(&mut self) {
         self.dsi.wcr().modify(|_, w| w.dsien().set_bit());
+    }
+
+    /// Enable both the DSI host and wrapper.
+    ///
+    /// Convenience method that calls [`start_host()`] and [`start_wrapper()`].
+    /// Only use this when the LTDC is already running.
+    pub fn start(&mut self) {
+        self.start_host();
+        self.start_wrapper();
     }
 
     pub fn refresh(&mut self) {
