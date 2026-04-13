@@ -225,11 +225,13 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
     ) -> DisplayController<T> {
         // Screen constants
         let total_width: u16 =
-            config.h_sync + config.h_back_porch + config.active_width + config.h_front_porch - 1;
+            config.h_sync + config.h_back_porch + config.active_width + config.h_front_porch;
         let total_height: u16 =
-            config.v_sync + config.v_back_porch + config.active_height + config.v_front_porch - 1;
+            config.v_sync + config.v_back_porch + config.active_height + config.v_front_porch;
         let lcd_clk: u32 =
             (total_width as u32) * (total_height as u32) * (config.frame_rate as u32);
+        let total_width_reg = total_width - 1;
+        let total_height_reg = total_height - 1;
 
         // TODO : change it to something safe ...
         unsafe {
@@ -324,8 +326,8 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
                 .set(config.v_sync + config.v_back_porch + config.active_height - 1)
         });
         ltdc.twcr().write(|w| {
-            w.totalw().set(total_width);
-            w.totalh().set(total_height)
+            w.totalw().set(total_width_reg);
+            w.totalh().set(total_height_reg)
         });
 
         // Configure LTDC signals polarity
@@ -374,11 +376,13 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
         hse_freq: Hertz,
     ) -> DisplayController<T> {
         let total_width: u16 =
-            config.h_sync + config.h_back_porch + config.active_width + config.h_front_porch - 1;
+            config.h_sync + config.h_back_porch + config.active_width + config.h_front_porch;
         let total_height: u16 =
-            config.v_sync + config.v_back_porch + config.active_height + config.v_front_porch - 1;
+            config.v_sync + config.v_back_porch + config.active_height + config.v_front_porch;
         let lcd_clk: u32 =
             (total_width as u32) * (total_height as u32) * (config.frame_rate as u32);
+        let total_width_reg = total_width - 1;
+        let total_height_reg = total_height - 1;
 
         unsafe {
             LTDC::enable_unchecked();
@@ -451,8 +455,8 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
                 .set(config.v_sync + config.v_back_porch + config.active_height - 1)
         });
         ltdc.twcr().write(|w| {
-            w.totalw().set(total_width);
-            w.totalh().set(total_height)
+            w.totalw().set(total_width_reg);
+            w.totalh().set(total_height_reg)
         });
 
         ltdc.gcr().write(|w| {
