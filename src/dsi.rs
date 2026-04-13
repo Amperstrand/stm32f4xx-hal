@@ -595,6 +595,12 @@ impl DsiHost {
         self.dsi.wcr().modify(|_, w| w.dsien().clear_bit());
     }
 
+    pub fn set_hline(&mut self, hline: u16) {
+        self.dsi
+            .vlcr()
+            .modify(|_, w| unsafe { w.hline().bits(hline) });
+    }
+
     pub fn refresh(&mut self) {
         self.dsi.wcr().modify(|_, w| w.ltdcen().set_bit());
     }
