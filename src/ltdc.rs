@@ -307,13 +307,18 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
              .pllsaip().bits(3)
              .pllsaiq().bits(8)
         });
+        // RM0386 §7.3.2: DCKCFGR.PLLSAIDIVR — division factor for LTDC pixel clock.
+        // 0=/2, 1=/4, 2=/8, 3=/16.
         rcc.dckcfgr().modify(|_, w| w.pllsaidivr().set(pllsaidivr));
 
-        // Enable PLLSAI and wait for it
+        // RM0386 §7.3.1: Enable PLLSAI and wait for lock (PLLSAIRDY).
         rcc.cr().modify(|_, w| w.pllsaion().on());
         while rcc.cr().read().pllsairdy().is_not_ready() {}
 
-        // Configure LTDC Timing registers
+        // RM0386 §12.4: LTDC timing registers.
+        // All values are accumulated minus 1 (LTDC uses 0-indexed positions).
+        // SSCR: sync width. BPCR: back porch. AWCR: active area. TWCR: total dimensions.
+        // Provenance: specter-diy stm32469i_discovery_lcd.c HAL_LTDCEx_StructInitFromVideoConfig.
         ltdc.sscr().write(|w| {
             w.hsw().set(config.h_sync - 1);
             w.vsh().set(config.v_sync - 1)
@@ -333,7 +338,8 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
             w.totalh().set(total_height)
         });
 
-        // Configure LTDC signals polarity
+        // RM0386 §12.4.1 GCR: Signal polarity configuration.
+        // HSPOL/VSPOL: sync polarity. DEPOL: data enable polarity. PCPOL: pixel clock edge.
         ltdc.gcr().write(|w| {
             w.hspol().bit(config.h_sync_pol);
             w.vspol().bit(config.v_sync_pol);
@@ -341,18 +347,16 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
             w.pcpol().bit(config.pixel_clock_pol)
         });
 
-        // Set blue background color
+        // RM0386 §12.4.2 BCCR: Background color (shown when no layer active).
         ltdc.bccr().write(|w| unsafe { w.bits(0xAAAAAAAA) });
 
-        // TODO: configure interupts
-
-        // Reload ltdc config immediatly
+        // RM0386 §12.4.3 SRCR: Shadow reload — IMR for immediate commit.
         ltdc.srcr().modify(|_, w| w.imr().set_bit());
-        // Turn display ON
-        ltdc.gcr()
-            .modify(|_, w| w.ltdcen().set_bit().den().set_bit());
 
-        // Reload ltdc config immediatly
+        // RM0386 §12.4.1 GCR: Enable LTDC (LTDCEN) and data enable (DEN).
+        ltdc.gcr().modify(|_, w| w.ltdcen().set_bit().den().set_bit());
+
+        // RM0386 §12.4.3 SRCR: Immediate reload after enabling LTDC.
         ltdc.srcr().modify(|_, w| w.imr().set_bit());
 
         DisplayController {
@@ -443,13 +447,15 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
         buffer: &'static mut [T],
         pixel_format: PixelFormat,
     ) {
+        // RM0386 §12.4.4–12.4.12: LTDC Layer configuration.
+        // Window covers full active area. Layer position includes porch offset.
         let _layer = self._ltdc.layer(layer as usize);
 
         let height = self.config.active_height;
         let width = self.config.active_width;
         assert!(buffer.len() == height as usize * width as usize);
 
-        // Horizontal and vertical window (coordinates include porches): where
+        // WHPCR/WVPCR: Layer window position (includes accumulated porch offset).
         // in the time frame the layer values should be sent
         let h_win_start = self.config.h_sync + self.config.h_back_porch - 1;
         let v_win_start = self.config.v_sync + self.config.v_back_porch - 1;
