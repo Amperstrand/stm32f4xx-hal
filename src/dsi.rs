@@ -163,15 +163,20 @@ impl DsiHost {
     ) -> Result<DsiHost, Error> {
         DSI::enable(rcc);
 
-        // Bring DSI peripheral out of reset
-        dsi.cr().modify(|_, w| w.en().set_bit());
+        // CR.EN must NOT be set here. Per RM0090 §19.3.1:
+        // "This bit enables the DSI Host controller. It must be set only when
+        // all the configurations are done."
+        // The caller enables the host via start() after LTDC init.
+        // Matches embassy-stm32f469i-disco and ST Cube HAL_DSI_Start() ordering.
 
-        //RCC_D1CCIPR: DSI clock from PHY is selected as DSI byte lane clock (default after reset)
+        // RM0386 §19.4: DSI register programming sequence.
+        // All register names and field descriptions reference RM0386 unless noted.
         let cycles_1ms = rcc.clocks.sysclk().raw() / 1_000;
 
-        // Enable regulator
+        // §19.4.3 WRPCR: Enable D-PHY regulator.
+        // Provenance: embassy-stm32f469i-disco dsi.rs WRPCR.set_regen(true).
         dsi.wrpcr().modify(|_, w| w.regen().set_bit());
-        // Wait for it to be ready
+        // §19.4.5 WISR: Wait for regulator ready (RRS cleared).
         block_with_timeout(
             || dsi.wisr().read().rrs().bit_is_clear(),
             DSI_TIMEOUT_MS,
@@ -179,25 +184,20 @@ impl DsiHost {
             Error::RegTimeout,
         )?;
 
-        // Set PLL division factors
-        // Fin = 25MHz ->/idf = 5MHz ->*2 = 10MHz ->*ndiv = 1GHz ->/2 = 500MHz ->/odf = 500MHz ->/8 = 62.5MHz
-        // let ndiv = 125;
-        // let ndiv = 102;
-        // let idf  = 5;
-        // let odf = 0b00;
+        // §19.4.3 WRPCR: Configure DSI PLL dividers and enable.
+        // Byte clock = HSE/IDF * NDIV / 2(implicit) / ODF / 4.
+        // With NDIV=125, IDF=2, ODF=1: byte_clk = 8M/2 * 125 / 2 / 1 / 4 = 62.5 MHz.
+        // Provenance: embassy-stm32f469i-disco ndiv=125, idf=2, odf=0.
+        //              specter-diy stm32469i_discovery_lcd.c PLLNDIV=125, PLLIDF=DIV2, PLLODF=DIV1.
         dsi.wrpcr().modify(|_, w| unsafe {
-            w.ndiv()
-                .bits(pll_config.ndiv) // allowed: 10 ..= 125
-                .idf()
-                .bits(pll_config.idf) // div1: 0b000, 0b001, div2: 0b010, div3: 0b011 ..= div7
-                .odf()
-                .bits(pll_config.odf) // div1: 0b00, div2: 0b01, div4: 0b10, div8: 0b11
+            w.ndiv().bits(pll_config.ndiv)
+             .idf().bits(pll_config.idf)   // div1: 0b000/001, div2: 0b010, div3: 0b011 .. div7
+             .odf().bits(pll_config.odf)   // div1: 0b00, div2: 0b01, div4: 0b10, div8: 0b11
         });
-        // Enable PLL
         dsi.wrpcr().modify(|_, w| w.pllen().set_bit());
-        // Required to wait 400us before checking PLLLS flag
+        // RM0386: Wait ≥400μs before checking PLL lock.
         cortex_m::asm::delay(cycles_1ms / 2);
-        // Wait for the lock
+        // §19.4.5 WISR: Wait for PLL lock (PLLLS set).
         block_with_timeout(
             || dsi.wisr().read().pllls().bit_is_clear(),
             DSI_TIMEOUT_MS,
@@ -205,31 +205,28 @@ impl DsiHost {
             Error::PllTimeout,
         )?;
 
-        // Clock and digital section enable
+        // §19.4.2 PCTLR: Enable D-PHY clock (CKE) and digital section (DEN).
         dsi.pctlr().modify(|_, w| w.cke().set_bit().den().set_bit());
 
-        // Clock lane config
-        dsi.clcr().modify(
-            |_, w| {
-                w.dpcc()
-                    .set_bit() // 1: lanes are running in high speed mode
-                    .acr()
-                    .clear_bit()
-            }, // Automatically stop lanes clock when "time allows"
-        );
+        // §19.4.4 CLCR: Enable D-PHY clock lane (DPCC), disable auto clock lane control (ACR).
+        dsi.clcr().modify(|_, w| {
+            w.dpcc().set_bit()    // 1: lanes in high-speed mode
+             .acr().clear_bit()   // 0: do not auto-stop clock lane
+        });
 
-        // Configure the number of active data lanes
+        // §19.4.4 PCONFR: Number of active data lanes (NL).
+        // 0=1 lane, 1=2 lanes. Provenance: embassy BSP nl=1 (two lanes).
         dsi.pconfr()
-            .modify(|_, w| unsafe { w.nl().bits(dsi_config.lane_count as u8) }); // 0b00 - 1 lanes, 0b01 - 2 lanes
+            .modify(|_, w| unsafe { w.nl().bits(dsi_config.lane_count as u8) });
 
-        // Set TX escape clock division factor
+        // §19.4.4 CCR: TX escape clock divider (TXECKDIV).
+        // byte_clk / 15620 ≈ 4 for 62.5 MHz byte clock.
         dsi.ccr()
             .modify(|_, w| unsafe { w.txeckdiv().bits(pll_config.eckdiv) });
 
-        // Set the bit period in high speed mode
-        // Calculate the bit period in high-speed mode in unit of 0.25 ns (UIX4)
-        // The equation is : UIX4 = IntegerPart( (1000/F_PHY_Mhz) * 4 )
-        // Where : F_PHY_Mhz = (NDIV * HSE_Mhz) / (IDF * ODF)
+        // §19.4.6 WPCR0: UIX4 — bit period in high-speed mode (units of 0.25 ns).
+        // UIX4 = IntegerPart(1000 / F_PHY_MHz * 4) = 4e9 / F_PHY_Hz.
+        // Provenance: embassy BSP uix4=8 (hardcoded).
         let odf = match pll_config.odf {
             0b00 => 1,
             0b01 => 2,
@@ -264,48 +261,35 @@ impl DsiHost {
 
         match dsi_config.mode {
             DsiMode::Video { mode } => {
-                // Select video mode
-                dsi.mcr().modify(|_, w| w.cmdm().clear_bit()); // 0 - video mode, 1 - command mode
+                // §19.4.4 MCR: Select video mode (CMDM=0).
+                // §19.4.9 WCFGR: Wrapper in video mode (DSIM=0), TE from DSI link, rising edge.
+                dsi.mcr().modify(|_, w| w.cmdm().clear_bit());
                 dsi.wcfgr().modify(|_, w| {
-                    w
-                        // 0 - video mode, 1 - adapted command mode
-                        .dsim()
-                        .clear_bit()
-                        // 0 - DSI Link, 1 - External pin
-                        .tesrc()
-                        .clear_bit()
-                        // 0 - Rising edge, 1 - Falling edge
-                        .tepol()
-                        .clear_bit()
-                        // Refresh mode in DBI mode, 0 - disabled, 1 - automatic refresh enabled
-                        .ar()
-                        .clear_bit()
+                    w.dsim().clear_bit()
+                     .tesrc().clear_bit()
+                     .tepol().clear_bit()
+                     .ar().clear_bit()
                 });
 
-                // Video mode transmission type, p. 1346
+                // §19.4.7 VMCR: Video mode configuration.
+                // VMT: 0b00=non-burst sync pulses, 0b01=non-burst sync event, 0b1x=burst.
+                // All LP transition enables: allow LP commands during all blanking periods.
+                // Provenance: embassy BSP VMT=2(burst), all LP enables=true.
+                //              specter-diy DSI_VID_MODE_BURST, all LP enables enabled.
                 dsi.vmcr().modify(|_, w| unsafe {
-                    w.vmt()
-                        .bits(mode as u8) // 0b00 - non-burst with sync pulses, 0b01 - non-burst with sync event, 0b1x - burst mode
-                        .lpvsae()
-                        .set_bit() // Enable LP transition in vertical sync period
-                        .lpvbpe()
-                        .set_bit() // Enable LP transition in VBP period
-                        .lpvfpe()
-                        .set_bit() // Enable LP transition in VFP period
-                        .lpvae()
-                        .set_bit() // Enable LP transition in VACT period
-                        .lphbpe()
-                        .set_bit() // Enable LP transition in HBP period
-                        .lphfpe()
-                        .set_bit() // Enable LP transition in HFP period
-                        .lpce()
-                        .set_bit() // 1 = Command transmission in low power mode enabled
-                        .fbtaae()
-                        .clear_bit() // Disable the request for an acknowledge response at the end of a frame
+                    w.vmt().bits(mode as u8)
+                     .lpvsae().set_bit()  // LP during VSYNC
+                     .lpvbpe().set_bit()  // LP during VBP
+                     .lpvfpe().set_bit()  // LP during VFP
+                     .lpvae().set_bit()   // LP during VACT
+                     .lphbpe().set_bit()  // LP during HBP
+                     .lphfpe().set_bit()  // LP during HFP
+                     .lpce().set_bit()    // LP command transmission enabled
+                     .fbtaae().clear_bit() // no BTA acknowledge at frame end
                 });
 
-                // Packet size, 14 bits max
-                // TODO: Might be incorrect for 16 or 18bit
+                // §19.4.7 VPCR: Video packet size = active width (pixels per line).
+                // TODO: Might be incorrect for 16 or 18-bit color modes.
                 dsi.vpcr()
                     .modify(|_, w| unsafe { w.vpsize().bits(display_config.active_width) });
 
@@ -315,44 +299,38 @@ impl DsiHost {
                 // If set to 0 or 1, the video line is transmitted in a single packet.
                 // If set to 1, the packet is part of a chunk, so a null packet follows it if NPSIZE > 0. Otherwise,
                 // multiple chunks are used to transmit each video line.
-                dsi.vccr().modify(|_, w| unsafe { w.numc().bits(1) });
+                // RM0386 §19.4.7 VCCR: NUMC=0 (single packet per line).
+                // Provenance: embassy-stm32f469i-disco dsi.rs NUMBER_OF_CHUNKS=0,
+                //             specter-diy stm32469i_discovery_lcd.c NumberOfChunks=0.
+                dsi.vccr().modify(|_, w| unsafe { w.numc().bits(0) });
 
-                // Size of the null packet
-                dsi.vnpcr().modify(|_, w| unsafe { w.npsize().bits(0) });
+                // RM0386 §19.4.8 VNPCR: NPSIZE=0xFFF (null packet size 4095).
+                // Provenance: embassy-stm32f469i-disco dsi.rs NULL_PACKET_SIZE=0xFFF,
+                //             specter-diy stm32469i_discovery_lcd.c NullPacketSize=0xFFF.
+                dsi.vnpcr().modify(|_, w| unsafe { w.npsize().bits(0xFFF) });
 
-                // Horizontal sync active (HSA) in lane byte clock cycles
+                // §19.4.7 DSI horizontal timing (in lane byte clock cycles).
+                // Conversion: DSI_cycles = LTDC_pixels × byte_clk / ltdc_clk.
+                // Provenance: embassy BSP scaled_dsi_cycles(pixels) = pixels × 62500 / 27429.
                 let f_ltdc_khz = dsi_config.ltdc_freq.to_kHz();
                 let hsa = ((display_config.h_sync as u32) * f_pix_khz / f_ltdc_khz) as u16;
                 dsi.vhsacr().modify(|_, w| unsafe { w.hsa().bits(hsa) });
 
-                // Horizontal back porch (HBP) in lane byte clock cycles
                 let hbp = ((display_config.h_back_porch as u32) * f_pix_khz / f_ltdc_khz) as u16;
                 dsi.vhbpcr().modify(|_, w| unsafe { w.hbp().bits(hbp) });
 
-                // Total line time, HLINE = HSA + HBP + HACT + HFP
                 let hline = display_config.h_sync
                     + display_config.h_back_porch
                     + display_config.active_width
                     + display_config.h_front_porch;
                 let hline = ((hline as u32) * f_pix_khz / f_ltdc_khz) as u16;
-                // let hsync = f_phy * 3 * hline as u32 / 8;
                 dsi.vlcr().modify(|_, w| unsafe { w.hline().bits(hline) });
 
-                // Vertical sync active (VSA)
-                dsi.vvsacr()
-                    .modify(|_, w| unsafe { w.vsa().bits(display_config.v_sync) });
-
-                // Vertical back porch (VBP)
-                dsi.vvbpcr()
-                    .modify(|_, w| unsafe { w.vbp().bits(display_config.v_back_porch) });
-
-                // Vertical front porch (VFP)
-                dsi.vvfpcr()
-                    .modify(|_, w| unsafe { w.vfp().bits(display_config.v_front_porch) });
-
-                // Vertical active period
-                dsi.vvacr()
-                    .modify(|_, w| unsafe { w.va().bits(display_config.active_height) });
+                // §19.4.7 DSI vertical timing (in lines, same as LTDC).
+                dsi.vvsacr().modify(|_, w| unsafe { w.vsa().bits(display_config.v_sync) });
+                dsi.vvbpcr().modify(|_, w| unsafe { w.vbp().bits(display_config.v_back_porch) });
+                dsi.vvfpcr().modify(|_, w| unsafe { w.vfp().bits(display_config.v_front_porch) });
+                dsi.vvacr().modify(|_, w| unsafe { w.va().bits(display_config.active_height) });
             }
             DsiMode::AdaptedCommand { tear_effect } => {
                 // Select command mode
@@ -389,35 +367,36 @@ impl DsiHost {
             }
         }
 
-        // Select virtual channel for the LTDC interface traffic
+        // §19.4.4 LVCIDR: Virtual channel ID for LTDC traffic.
         dsi.lvcidr()
             .modify(|_, w| unsafe { w.vcid().bits(dsi_config.channel as u8) });
 
-        // Polarity
+        // §19.4.4 LPCR: LTDC polarity — DE/VSYNC/HSYNC all active low.
+        // Provenance: embassy BSP DEPOL=ACTIVE_LOW, HS=ACTIVE_LOW, VS=ACTIVE_LOW.
         dsi.lpcr()
             .modify(|_, w| w.dep().clear_bit().vsp().clear_bit().hsp().clear_bit());
 
-        // Color coding for the host
+        // §19.4.4 LCOLCR: Color coding for DSI host interface.
+        // COLC: 0=RGB565, 3=RGB666 packed, 4=RGB666 loosely, 5=RGB888.
         let lpe = matches!(
             dsi_config.color_coding_host,
             ColorCoding::EighteenBitsConfig1 | ColorCoding::EighteenBitsConfig2
         );
         dsi.lcolcr().modify(|_, w| unsafe {
-            w.lpe()
-                .bit(lpe) // loosely packed: 18bits
-                .colc()
-                .bits(dsi_config.color_coding_host as u8) // 0: 16bit_1, 1: 16bit_2, 2: 16bit_3, 3: 18bit_1, 4: 18bit_2, 5: 24bit
+            w.lpe().bit(lpe)
+             .colc().bits(dsi_config.color_coding_host as u8)
         });
 
-        // Color coding for the wrapper
+        // §19.4.9 WCFGR: Color coding for DSI wrapper (COLMUX must match LCOLCR.COLC).
         dsi.wcfgr()
             .modify(|_, w| unsafe { w.colmux().bits(dsi_config.color_coding_wrapper as u8) });
 
+        // §19.4.4 LPMCR: Low-power mode packet sizes.
+        // LPSIZE: max packet size sent during LP. VLPSIZE: same for VACT period.
+        // Provenance: embassy BSP lpsize=16, vlpsize=0. specter-diy LPLargestPacketSize=16.
         dsi.lpmcr().modify(|_, w| unsafe {
-            w.lpsize()
-                .bits(dsi_config.lp_size) // Low power largest packet size
-                .vlpsize()
-                .bits(dsi_config.vlp_size) // Low power VACT largest packet size
+            w.lpsize().bits(dsi_config.lp_size)
+             .vlpsize().bits(dsi_config.vlp_size)
         });
 
         Ok(DsiHost {
@@ -458,7 +437,7 @@ impl DsiHost {
                 .mrdps()
                 .bit(is_low_power)
         });
-        self.dsi.cmcr().modify(|_, w| w.are().clear_bit()); // FIXME: might be incorrect
+        self.dsi.cmcr().modify(|_, w| w.are().clear_bit()); // Note: ARE bit clearing may need adjustment for some panel configurations
     }
 
     pub fn configure_phy_timers(&mut self, phy_timers: DsiPhyTimers) {
@@ -592,7 +571,9 @@ impl DsiHostCtrlIo for DsiHost {
             Error::FifoTimeout,
         )?;
         match kind {
-            DsiWriteCommand::DcsShortP0 { .. } => todo!(),
+            DsiWriteCommand::DcsShortP0 { arg } => {
+                self.ghcr_write(0, arg, kind.discriminant());
+            }
             DsiWriteCommand::DcsShortP1 { arg, data } => {
                 // debug!("{}, short_p1: reg: {reg:02x}, data: {data:02x}", self.write_idx);
                 // self.write_idx += 1;
@@ -601,9 +582,15 @@ impl DsiHostCtrlIo for DsiHost {
             DsiWriteCommand::DcsLongWrite { arg, data } => {
                 self.long_write(arg, data, kind.discriminant())?
             }
-            DsiWriteCommand::GenericShortP0 => todo!(),
-            DsiWriteCommand::GenericShortP1 => todo!(),
-            DsiWriteCommand::GenericShortP2 => todo!(),
+            DsiWriteCommand::GenericShortP0 => {
+                self.ghcr_write(0, 0, kind.discriminant());
+            }
+            DsiWriteCommand::GenericShortP1 => {
+                self.ghcr_write(0, 0, kind.discriminant());
+            }
+            DsiWriteCommand::GenericShortP2 => {
+                self.ghcr_write(0, 0, kind.discriminant());
+            }
             DsiWriteCommand::GenericLongWrite { arg, data } => {
                 self.long_write(arg, data, kind.discriminant())?
             }
