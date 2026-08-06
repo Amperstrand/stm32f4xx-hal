@@ -191,8 +191,8 @@ impl DsiHost {
         //              specter-diy stm32469i_discovery_lcd.c PLLNDIV=125, PLLIDF=DIV2, PLLODF=DIV1.
         dsi.wrpcr().modify(|_, w| unsafe {
             w.ndiv().bits(pll_config.ndiv)
-             .idf().bits(pll_config.idf)
-             .odf().bits(pll_config.odf)
+             .idf().bits(pll_config.idf)   // div1: 0b000/001, div2: 0b010, div3: 0b011 .. div7
+             .odf().bits(pll_config.odf)   // div1: 0b00, div2: 0b01, div4: 0b10, div8: 0b11
         });
         dsi.wrpcr().modify(|_, w| w.pllen().set_bit());
         // RM0386: Wait ≥400μs before checking PLL lock.
@@ -209,7 +209,10 @@ impl DsiHost {
         dsi.pctlr().modify(|_, w| w.cke().set_bit().den().set_bit());
 
         // §19.4.4 CLCR: Enable D-PHY clock lane (DPCC), disable auto clock lane control (ACR).
-        dsi.clcr().modify(|_, w| w.dpcc().set_bit().acr().clear_bit());
+        dsi.clcr().modify(|_, w| {
+            w.dpcc().set_bit()    // 1: lanes in high-speed mode
+             .acr().clear_bit()   // 0: do not auto-stop clock lane
+        });
 
         // §19.4.4 PCONFR: Number of active data lanes (NL).
         // 0=1 lane, 1=2 lanes. Provenance: embassy BSP nl=1 (two lanes).
@@ -222,7 +225,8 @@ impl DsiHost {
             .modify(|_, w| unsafe { w.txeckdiv().bits(pll_config.eckdiv) });
 
         // §19.4.6 WPCR0: UIX4 — bit period in high-speed mode (units of 0.25 ns).
-        // UIX4 = 4e9 / F_PHY_Hz. Provenance: embassy BSP uix4=8 (hardcoded).
+        // UIX4 = IntegerPart(1000 / F_PHY_MHz * 4) = 4e9 / F_PHY_Hz.
+        // Provenance: embassy BSP uix4=8 (hardcoded).
         let odf = match pll_config.odf {
             0b00 => 1,
             0b01 => 2,
@@ -274,17 +278,18 @@ impl DsiHost {
                 //              specter-diy DSI_VID_MODE_BURST, all LP enables enabled.
                 dsi.vmcr().modify(|_, w| unsafe {
                     w.vmt().bits(mode as u8)
-                     .lpvsae().set_bit()
-                     .lpvbpe().set_bit()
-                     .lpvfpe().set_bit()
-                     .lpvae().set_bit()
-                     .lphbpe().set_bit()
-                     .lphfpe().set_bit()
-                     .lpce().set_bit()
-                     .fbtaae().clear_bit()
+                     .lpvsae().set_bit()  // LP during VSYNC
+                     .lpvbpe().set_bit()  // LP during VBP
+                     .lpvfpe().set_bit()  // LP during VFP
+                     .lpvae().set_bit()   // LP during VACT
+                     .lphbpe().set_bit()  // LP during HBP
+                     .lphfpe().set_bit()  // LP during HFP
+                     .lpce().set_bit()    // LP command transmission enabled
+                     .fbtaae().clear_bit() // no BTA acknowledge at frame end
                 });
 
                 // §19.4.7 VPCR: Video packet size = active width (pixels per line).
+                // TODO: Might be incorrect for 16 or 18-bit color modes.
                 dsi.vpcr()
                     .modify(|_, w| unsafe { w.vpsize().bits(display_config.active_width) });
 

@@ -348,7 +348,10 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
         });
 
         // RM0386 §12.4.2 BCCR: Background color (shown when no layer active).
+        // 0xAAAAAAAA = striped pattern for visual debugging.
         ltdc.bccr().write(|w| unsafe { w.bits(0xAAAAAAAA) });
+
+        // TODO: configure LTDC interrupts
 
         // RM0386 §12.4.3 SRCR: Shadow reload — IMR for immediate commit.
         ltdc.srcr().modify(|_, w| w.imr().set_bit());
@@ -455,7 +458,8 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
         let width = self.config.active_width;
         assert!(buffer.len() == height as usize * width as usize);
 
-        // WHPCR/WVPCR: Layer window position (includes accumulated porch offset).
+        // Window position: where in the frame timing the layer pixels are sent.
+        // Coordinates are absolute (include accumulated sync + porch).
         // in the time frame the layer values should be sent
         let h_win_start = self.config.h_sync + self.config.h_back_porch - 1;
         let v_win_start = self.config.v_sync + self.config.v_back_porch - 1;
