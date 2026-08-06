@@ -318,9 +318,14 @@ impl DsiHost {
                 // If set to 0 or 1, the video line is transmitted in a single packet.
                 // If set to 1, the packet is part of a chunk, so a null packet follows it if NPSIZE > 0. Otherwise,
                 // multiple chunks are used to transmit each video line.
+                // RM0386 §19.4.7 VCCR: NUMC=0 (single packet per line).
+                // Provenance: embassy-stm32f469i-disco dsi.rs NUMBER_OF_CHUNKS=0,
+                //             specter-diy stm32469i_discovery_lcd.c NumberOfChunks=0.
                 dsi.vccr().modify(|_, w| unsafe { w.numc().bits(0) });
 
-                // Null packet size — matches embassy-stm32f469i-disco and ST Cube BSP
+                // RM0386 §19.4.8 VNPCR: NPSIZE=0xFFF (null packet size 4095).
+                // Provenance: embassy-stm32f469i-disco dsi.rs NULL_PACKET_SIZE=0xFFF,
+                //             specter-diy stm32469i_discovery_lcd.c NullPacketSize=0xFFF.
                 dsi.vnpcr().modify(|_, w| unsafe { w.npsize().bits(0xFFF) });
 
                 // Horizontal sync active (HSA) in lane byte clock cycles
