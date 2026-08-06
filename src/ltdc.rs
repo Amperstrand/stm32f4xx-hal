@@ -297,10 +297,15 @@ impl<T: 'static + SupportedWord> DisplayController<T> {
             _ => unreachable!(),
         };
 
-        // // Write PPLSAI configuration
-        rcc.pllsaicfgr().write(|w| unsafe {
-            w.pllsain().bits(best_plln as u16);
-            w.pllsair().bits(best_pllr as u8)
+        // Write PLLSAI configuration
+        // RM0386 §7.3.3: PLLSAIP=0 is reserved — must set to valid divider.
+        // Use .modify() to preserve P/Q; .write() resets them to 0 (reserved).
+        // Provenance: embassy-stm32f469i-disco config_180() sets divp=DIV8, divq=DIV8.
+        rcc.pllsaicfgr().modify(|_, w| unsafe {
+            w.pllsain().bits(best_plln as u16)
+             .pllsair().bits(best_pllr as u8)
+             .pllsaip().bits(3)
+             .pllsaiq().bits(8)
         });
         rcc.dckcfgr().modify(|_, w| w.pllsaidivr().set(pllsaidivr));
 
