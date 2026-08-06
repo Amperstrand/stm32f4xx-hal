@@ -163,8 +163,11 @@ impl DsiHost {
     ) -> Result<DsiHost, Error> {
         DSI::enable(rcc);
 
-        // Bring DSI peripheral out of reset
-        dsi.cr().modify(|_, w| w.en().set_bit());
+        // CR.EN must NOT be set here. Per RM0090 §19.3.1:
+        // "This bit enables the DSI Host controller. It must be set only when
+        // all the configurations are done."
+        // The caller enables the host via start() after LTDC init.
+        // Matches embassy-stm32f469i-disco and ST Cube HAL_DSI_Start() ordering.
 
         //RCC_D1CCIPR: DSI clock from PHY is selected as DSI byte lane clock (default after reset)
         let cycles_1ms = rcc.clocks.sysclk().raw() / 1_000;
@@ -315,10 +318,10 @@ impl DsiHost {
                 // If set to 0 or 1, the video line is transmitted in a single packet.
                 // If set to 1, the packet is part of a chunk, so a null packet follows it if NPSIZE > 0. Otherwise,
                 // multiple chunks are used to transmit each video line.
-                dsi.vccr().modify(|_, w| unsafe { w.numc().bits(1) });
+                dsi.vccr().modify(|_, w| unsafe { w.numc().bits(0) });
 
-                // Size of the null packet
-                dsi.vnpcr().modify(|_, w| unsafe { w.npsize().bits(0) });
+                // Null packet size — matches embassy-stm32f469i-disco and ST Cube BSP
+                dsi.vnpcr().modify(|_, w| unsafe { w.npsize().bits(0xFFF) });
 
                 // Horizontal sync active (HSA) in lane byte clock cycles
                 let f_ltdc_khz = dsi_config.ltdc_freq.to_kHz();
