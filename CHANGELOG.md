@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
  - LTDC: add DSI-compatible constructor (`new_dsi()`) for DSI-driven displays that don't need LTDC pin configuration
  - LTDC: add `LtdcFramebuffer` with embedded-graphics `DrawTarget` support (behind `framebuffer` feature)
  - LTDC: add `layer_buffer_mut()`, `set_layer_transparency()`, `set_layer_buffer_address()`, `set_color_keying()` methods
+ - LTDC: add `swap_buffers()`, `swap_buffers_immediate()`, `is_reload_pending()`, `wait_for_reload()` for race-free double-buffering
 
 ### Changed
 
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
  - LTDC: fix ARGB4444 bytes-per-pixel value (was 16, now correctly 2)
+ - LTDC: fix double-buffering race condition in `set_layer_buffer_address()` — back-to-back VBR writes could leave shadow registers inconsistent and interfere with USB DMA
 
 ## [v0.23.0] - 2025-09-22
 
